@@ -380,10 +380,6 @@ const TimeTracker = () => {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <div className={cn(
-                            "font-mono",
-                            isDarkMode ? "text-gray-100" : "text-gray-900"
-                          )}>{log.time}</div>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -391,12 +387,16 @@ const TimeTracker = () => {
                             className={cn(
                               "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
                               isDarkMode
-                                ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700"
+                                ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700 bg-transparent" 
                                 : "text-blue-600 hover:text-blue-700 hover:bg-gray-100"
                             )}
                           >
                             Edit
                           </Button>
+                          <div className={cn(
+                            "font-mono",
+                            isDarkMode ? "text-gray-100" : "text-gray-900"
+                          )}>{log.time}</div>
                         </div>
                       )}
                       {log.duration && (
