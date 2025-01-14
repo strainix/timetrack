@@ -14,6 +14,8 @@ const TimeTracker = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
+  const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const [timerInterval, setTimerInterval] = useState(null);
 
   // Helper function for consistent time formatting
   const formatTime = (date) => {
@@ -23,6 +25,15 @@ const TimeTracker = () => {
       second: '2-digit',
       hour12: false 
     });
+  };
+
+  const formatElapsedTime = (milliseconds) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
   useEffect(() => {
@@ -69,6 +80,14 @@ const TimeTracker = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [timerInterval]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
       setCurrentTime(formatTime(now));
@@ -92,6 +111,14 @@ const TimeTracker = () => {
       time: formatTime(now),
       timestamp: now.getTime()
     }]);
+    
+    // Start the timer
+    const interval = setInterval(() => {
+      const currentTime = new Date();
+      const timeDiff = currentTime - now;
+      setElapsedTime(formatElapsedTime(timeDiff));
+    }, 1000);
+    setTimerInterval(interval);
   };
 
   const handleCheckOut = () => {
@@ -105,6 +132,13 @@ const TimeTracker = () => {
       duration: checkInTime ? calculateDuration(checkInTime, now) : 'N/A'
     }]);
     setCheckInTime(null);
+    
+    // Clear the timer
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      setTimerInterval(null);
+    }
+    setElapsedTime('00:00:00');
   };
 
   const calculateDuration = (start, end) => {
@@ -375,7 +409,7 @@ const TimeTracker = () => {
             <div className={cn(
               "text-4xl font-bold mb-6 font-mono",
               isDarkMode ? "text-gray-100" : "text-gray-900"
-            )}>{currentTime}</div>
+            )}>{isCheckedIn ? elapsedTime : '00:00:00'}</div>
             <Button 
               className={cn(
                 "w-48 h-12 transition-all duration-200 text-lg",
