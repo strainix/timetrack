@@ -314,15 +314,15 @@ const TimeTracker = () => {
               )}>Time Tracker</span>
             </div>
             <div className="flex gap-2 items-center">
-              <Button
+            <Button
                 variant="ghost"
                 size="sm"
                 onClick={toggleTheme}
                 className={cn(
-                  "p-2",
+                  "p-2 bg-transparent",
                   isDarkMode 
-                    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-700 border-transparent" 
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border-transparent"
                 )}
               >
                 {isDarkMode ? (
@@ -336,24 +336,24 @@ const TimeTracker = () => {
                 size="sm"
                 onClick={exportToExcel}
                 className={cn(
-                  "flex items-center gap-1 text-xs bg-transparent",
+                  "flex items-center gap-1 text-xs",
                   isDarkMode 
-                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700" 
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
                 )}
               >
                 <Download className="w-3 h-3" />
                 Export
               </Button>
               <Button 
-                variant="ghost" 
+                variant="outline" 
                 size="sm"
                 onClick={clearLogs}
                 className={cn(
-                  "flex items-center gap-1 text-xs bg-transparent",
+                  "flex items-center gap-1 text-xs",
                   isDarkMode 
-                    ? "text-red-400 hover:text-red-300 hover:bg-gray-700" 
-                    : "text-red-500 hover:text-red-600 hover:bg-gray-100"
+                    ? "border-gray-600 text-red-400 hover:text-red-300 hover:bg-gray-700 bg-transparent" 
+                    : "text-red-500 hover:text-red-600 hover:bg-gray-100 bg-transparent"
                 )}
               >
                 <Trash2 className="w-3 h-3" />
