@@ -335,10 +335,10 @@ const TimeTracker = () => {
                 size="sm"
                 onClick={exportToExcel}
                 className={cn(
-                  "flex items-center gap-1 text-xs",
+                  "flex items-center gap-1 text-xs bg-transparent",
                   isDarkMode 
-                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
-                    : "hover:bg-gray-100"
+                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 active:bg-gray-700" 
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/60 active:bg-gray-100/60 active:text-gray-900"
                 )}
               >
                 <Download className="w-3 h-3" />
