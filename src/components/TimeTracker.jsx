@@ -147,22 +147,29 @@ const TimeTracker = () => {
   const handleCheckOut = () => {
     const now = new Date();
     setIsCheckedIn(false);
-    setLogs(prev => [...prev, {
-      type: 'Check Out',
-      date: now.toLocaleDateString(),
-      time: formatTime(now),
-      timestamp: now.getTime(),
-      duration: checkInTime ? calculateDuration(checkInTime, now) : 'N/A'
-    }]);
-    setCheckInTime(null);
-    
-    // Clear the timer
+  
+    // Get the last check-in time from state
+    const lastCheckInTime = checkInTime ? checkInTime.getTime() : null;
+  
+    setLogs(prev => {
+      const newLog = {
+        type: 'Check Out',
+        date: now.toLocaleDateString(),
+        time: formatTime(now),
+        timestamp: now.getTime(),
+        duration: lastCheckInTime ? calculateDuration(lastCheckInTime, now.getTime()) : 'N/A'
+      };
+      return [...prev, newLog];
+    });
+  
+    // Clear timer states
     if (timerInterval) {
       clearInterval(timerInterval);
       setTimerInterval(null);
     }
+    setCheckInTime(null);
     setElapsedTime('00:00:00');
-    
+  
     // Clear the check-in state from localStorage
     localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
       isCheckedIn: false,
@@ -226,45 +233,51 @@ const TimeTracker = () => {
       // Clear existing timer
       if (timerInterval) {
         clearInterval(timerInterval);
+        setTimerInterval(null);  // Clear the interval state
       }
   
-      // Create new Date object for the edited check-in time
       const editedCheckInTime = new Date(lastCheckIn.timestamp);
+      
+      // Update the check-in time in state
       setCheckInTime(editedCheckInTime);
   
-      // Update localStorage with new check-in time
+      // Update localStorage
       localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
         isCheckedIn: true,
         checkInTime: editedCheckInTime.toISOString()
       }));
   
-      // Start new timer from edited time
-      const interval = setInterval(() => {
+      // Calculate current elapsed time immediately
+      const currentTimeDiff = new Date() - editedCheckInTime;
+      setElapsedTime(formatElapsedTime(currentTimeDiff));
+  
+      // Start new timer
+      const newInterval = setInterval(() => {
         const currentTime = new Date();
         const timeDiff = currentTime - editedCheckInTime;
         setElapsedTime(formatElapsedTime(timeDiff));
       }, 1000);
-      setTimerInterval(interval);
-  
-      // Update initial elapsed time
-      const initialTimeDiff = new Date() - editedCheckInTime;
-      setElapsedTime(formatElapsedTime(initialTimeDiff));
+      
+      setTimerInterval(newInterval);
     }
   
-    // Recalculate durations for all check-out entries
+    // Set the logs first before recalculating durations
+    setLogs(sortedLogs);
+  
+    // Then recalculate durations
     const logsWithUpdatedDurations = sortedLogs.map((log, index) => {
-      if (log.type === 'Check Out' && index > 0) {
-        // Find the last check-in before this check-out
-        for (let i = index - 1; i >= 0; i--) {
-          if (sortedLogs[i].type === 'Check In') {
-            return {
-              ...log,
-              duration: calculateDuration(
-                sortedLogs[i].timestamp,
-                log.timestamp
-              )
-            };
-          }
+      if (log.type === 'Check Out') {
+        // Find the corresponding check-in
+        const checkInLog = [...sortedLogs]
+          .slice(0, index)
+          .reverse()
+          .find(l => l.type === 'Check In');
+        
+        if (checkInLog) {
+          return {
+            ...log,
+            duration: calculateDuration(checkInLog.timestamp, log.timestamp)
+          };
         }
       }
       return log;
