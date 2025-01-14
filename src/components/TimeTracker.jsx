@@ -355,7 +355,7 @@ const TimeTracker = () => {
                               size="sm"
                               onClick={() => handleSaveEdit(log)}
                               className={cn(
-                                "h-6 px-2 text-xs",
+                                "h-6 px-2 text-xs bg-transparent",
                                 isDarkMode
                                   ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
                                   : "text-green-600 hover:text-green-700 hover:bg-gray-100"
@@ -368,7 +368,7 @@ const TimeTracker = () => {
                               size="sm"
                               onClick={handleCancelEdit}
                               className={cn(
-                                "h-6 px-2 text-xs",
+                                "h-6 px-2 text-xs bg-transparent",
                                 isDarkMode
                                   ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
                                   : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
