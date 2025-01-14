@@ -13,15 +13,30 @@ const TimeTracker = () => {
   const [logs, setLogs] = useState([]);
 
   useEffect(() => {
+    // Load saved logs
     const savedLogs = localStorage.getItem('timeTrackerLogs');
     if (savedLogs) {
       setLogs(JSON.parse(savedLogs));
     }
+    
+    // Load check-in state
+    const savedCheckInState = localStorage.getItem('timeTrackerCheckIn');
+    if (savedCheckInState) {
+      const { isCheckedIn: savedIsCheckedIn, checkInTime: savedCheckInTime } = JSON.parse(savedCheckInState);
+      setIsCheckedIn(savedIsCheckedIn);
+      setCheckInTime(savedCheckInTime ? new Date(savedCheckInTime) : null);
+    }
   }, []);
 
   useEffect(() => {
+    // Save logs
     localStorage.setItem('timeTrackerLogs', JSON.stringify(logs));
-  }, [logs]);
+    // Save check-in state
+    localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+      isCheckedIn,
+      checkInTime: checkInTime ? checkInTime.toISOString() : null
+    }));
+  }, [logs, isCheckedIn, checkInTime]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -110,7 +125,10 @@ const TimeTracker = () => {
   const clearLogs = () => {
     if (window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
       setLogs([]);
+      setIsCheckedIn(false);
+      setCheckInTime(null);
       localStorage.removeItem('timeTrackerLogs');
+      localStorage.removeItem('timeTrackerCheckIn');
     }
   };
 
