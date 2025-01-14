@@ -273,7 +273,7 @@ const TimeTracker = () => {
                       <div className="text-gray-500 text-xs">{log.date}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono">{log.time}</div>
+                      <div className="font-mono text-gray-900">{log.time}</div>
                       {log.duration && (
                         <div className="text-xs text-gray-500">{log.duration}</div>
                       )}
