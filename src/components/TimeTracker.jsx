@@ -14,6 +14,8 @@ const TimeTracker = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
+  const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const [todayTotalMinutes, setTodayTotalMinutes] = useState(0);
 
   // Helper function for consistent time formatting
   const formatTime = (date) => {
@@ -57,6 +59,24 @@ const TimeTracker = () => {
     }));
   }, [logs, isCheckedIn, checkInTime]);
 
+  // Calculate total time for today from logs
+  const calculateTodayTotal = () => {
+    const today = new Date().toLocaleDateString();
+    const todayLogs = logs.filter(log => log.date === today);
+    let total = 0;
+    
+    // Calculate completed intervals
+    for (let i = 0; i < todayLogs.length - 1; i += 2) {
+      if (todayLogs[i]?.type === 'Check In' && todayLogs[i + 1]?.type === 'Check Out') {
+        const start = todayLogs[i].timestamp;
+        const end = todayLogs[i + 1].timestamp;
+        total += Math.floor((end - start) / 1000 / 60);
+      }
+    }
+    
+    return total;
+  };
+  
   // Save theme preference
   useEffect(() => {
     localStorage.setItem('timeTrackerTheme', JSON.stringify(isDarkMode));
@@ -71,16 +91,35 @@ const TimeTracker = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setCurrentTime(formatTime(now));
       setCurrentDate(now.toLocaleDateString(undefined, { 
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
         day: 'numeric' 
       }));
+
+      // Calculate total elapsed time including current session if checked in
+      let totalMinutes = calculateTodayTotal();
+      
+      if (isCheckedIn && checkInTime) {
+        const currentSessionMinutes = Math.floor((now - checkInTime) / 1000 / 60);
+        totalMinutes += currentSessionMinutes;
+      }
+      
+      setTodayTotalMinutes(totalMinutes);
+      
+      // Format for display with smooth seconds
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const seconds = Math.floor((now.getTime() / 1000) % 60);
+      
+      setElapsedTime(
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      );
     }, 1000);
+    
     return () => clearInterval(timer);
-  }, []);
+  }, [isCheckedIn, checkInTime, logs]);
 
   const handleCheckIn = () => {
     const now = new Date();
@@ -375,7 +414,7 @@ const TimeTracker = () => {
             <div className={cn(
               "text-4xl font-bold mb-6 font-mono",
               isDarkMode ? "text-gray-100" : "text-gray-900"
-            )}>{currentTime}</div>
+            )}>{elapsedTime}</div>
             <Button 
               className={cn(
                 "w-48 h-12 transition-all duration-200 text-lg",
