@@ -115,13 +115,13 @@ const TimeTracker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <Card className="max-w-lg mx-auto shadow-lg">
+    <div className="min-h-screen bg-gray-50 px-2 py-4 sm:px-4">
+      <Card className="w-full shadow-lg">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-500" />
-              <span className="text-lg">Time Tracker</span>
+              <span className="text-lg text-gray-900">Time Tracker</span>
             </div>
             <div className="flex gap-2">
               <Button 
@@ -149,7 +149,7 @@ const TimeTracker = () => {
         <CardContent>
           <div className="text-center py-8 border-y">
             <div className="text-sm text-gray-500 mb-1">{currentDate}</div>
-            <div className="text-4xl font-bold mb-6 font-mono">{currentTime}</div>
+            <div className="text-4xl font-bold mb-6 font-mono text-gray-900">{currentTime}</div>
             <Button 
               className={cn(
                 "w-48 h-12 transition-all duration-200 text-lg",
