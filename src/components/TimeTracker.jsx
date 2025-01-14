@@ -193,14 +193,14 @@ const TimeTracker = () => {
       alert('Please enter a valid time in 24-hour format (HH:mm:ss)');
       return;
     }
-
+  
     const updatedLogs = logs.map(log => {
       if (log.timestamp === logToEdit.timestamp) {
         // Create a new Date object from the original date and new time
         const [hours, minutes, seconds] = editedTime.split(':').map(Number);
         const newDate = new Date(log.timestamp);
         newDate.setHours(hours, minutes, seconds);
-
+  
         // Update the log entry
         return {
           ...log,
@@ -210,10 +210,47 @@ const TimeTracker = () => {
       }
       return log;
     });
-
+  
     // Sort logs by timestamp to maintain chronological order
     const sortedLogs = updatedLogs.sort((a, b) => a.timestamp - b.timestamp);
-
+  
+    // Find if we're editing the last check-in (active session)
+    const lastCheckIn = [...sortedLogs]
+      .reverse()
+      .find(log => log.type === 'Check In' && !sortedLogs
+        .some(l => l.type === 'Check Out' && l.timestamp > log.timestamp)
+      );
+  
+    // If we're editing the active check-in, update the timer
+    if (isCheckedIn && lastCheckIn && lastCheckIn.timestamp === logToEdit.timestamp) {
+      // Clear existing timer
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+  
+      // Create new Date object for the edited check-in time
+      const editedCheckInTime = new Date(lastCheckIn.timestamp);
+      setCheckInTime(editedCheckInTime);
+  
+      // Update localStorage with new check-in time
+      localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+        isCheckedIn: true,
+        checkInTime: editedCheckInTime.toISOString()
+      }));
+  
+      // Start new timer from edited time
+      const interval = setInterval(() => {
+        const currentTime = new Date();
+        const timeDiff = currentTime - editedCheckInTime;
+        setElapsedTime(formatElapsedTime(timeDiff));
+      }, 1000);
+      setTimerInterval(interval);
+  
+      // Update initial elapsed time
+      const initialTimeDiff = new Date() - editedCheckInTime;
+      setElapsedTime(formatElapsedTime(initialTimeDiff));
+    }
+  
     // Recalculate durations for all check-out entries
     const logsWithUpdatedDurations = sortedLogs.map((log, index) => {
       if (log.type === 'Check Out' && index > 0) {
@@ -232,7 +269,7 @@ const TimeTracker = () => {
       }
       return log;
     });
-
+  
     setLogs(logsWithUpdatedDurations);
     setEditingLogId(null);
     setEditedTime('');
