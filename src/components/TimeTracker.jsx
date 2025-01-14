@@ -330,13 +330,12 @@ const TimeTracker = () => {
                 ) : (
                   <Moon className="w-4 h-4" />
                 )}
-              </Button>
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={exportToExcel}
                 className={cn(
-                  "flex items-center gap-1 text-xs",
+                  "flex items-center gap-1 text-xs bg-transparent",
                   isDarkMode 
                     ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700" 
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
@@ -350,7 +349,7 @@ const TimeTracker = () => {
                 size="sm"
                 onClick={clearLogs}
                 className={cn(
-                  "flex items-center gap-1 text-xs",
+                  "flex items-center gap-1 text-xs bg-transparent",
                   isDarkMode 
                     ? "text-red-400 hover:text-red-300 hover:bg-gray-700" 
                     : "text-red-500 hover:text-red-600 hover:bg-gray-100"
