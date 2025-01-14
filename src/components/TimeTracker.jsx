@@ -208,10 +208,16 @@ const TimeTracker = () => {
             )}>{currentTime}</div>
             <Button 
               className={cn(
-                "w-48 h-12 transition-all duration-200 text-lg shadow-lg",
+                "w-48 h-12 transition-all duration-200 text-lg",
                 isCheckedIn 
-                  ? "bg-red-500 hover:bg-red-600 shadow-red-200/20" 
-                  : "bg-green-500 hover:bg-green-600 shadow-green-200/20"
+                  ? cn(
+                      "bg-red-500 hover:bg-red-600",
+                      isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
+                    )
+                  : cn(
+                      "bg-green-500 hover:bg-green-600",
+                      isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
+                    )
               )}
               onClick={isCheckedIn ? handleCheckOut : handleCheckIn}
             >
