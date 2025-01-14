@@ -115,8 +115,8 @@ const TimeTracker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 px-2 py-4 sm:px-4">
-      <Card className="w-full shadow-lg">
+    <div className="min-h-screen bg-white flex items-center">
+      <Card className="w-[95%] mx-auto shadow-lg">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
