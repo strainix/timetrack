@@ -148,7 +148,7 @@ const TimeTracker = () => {
                 isDarkMode ? "text-blue-400" : "text-blue-500"
               )} />
               <span className={cn(
-                "text-lg",
+                "text-base translate-y-[1px]",
                 isDarkMode ? "text-gray-100" : "text-gray-900"
               )}>Time Tracker</span>
             </div>
