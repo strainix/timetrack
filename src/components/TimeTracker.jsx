@@ -48,9 +48,26 @@ const TimeTracker = () => {
     if (savedCheckInState) {
       const { isCheckedIn: savedIsCheckedIn, checkInTime: savedCheckInTime } = JSON.parse(savedCheckInState);
       setIsCheckedIn(savedIsCheckedIn);
-      setCheckInTime(savedCheckInTime ? new Date(savedCheckInTime) : null);
+      
+      // If there was an active check-in, restore the timer
+      if (savedIsCheckedIn && savedCheckInTime) {
+        const checkInDate = new Date(savedCheckInTime);
+        setCheckInTime(checkInDate);
+        
+        // Start the timer with the saved check-in time
+        const interval = setInterval(() => {
+          const currentTime = new Date();
+          const timeDiff = currentTime - checkInDate;
+          setElapsedTime(formatElapsedTime(timeDiff));
+        }, 1000);
+        setTimerInterval(interval);
+        
+        // Calculate and set initial elapsed time
+        const initialTimeDiff = new Date() - checkInDate;
+        setElapsedTime(formatElapsedTime(initialTimeDiff));
+      }
     }
-
+  
     // Load theme preference
     const savedTheme = localStorage.getItem('timeTrackerTheme');
     if (savedTheme) {
@@ -112,6 +129,12 @@ const TimeTracker = () => {
       timestamp: now.getTime()
     }]);
     
+    // Store check-in state in localStorage
+    localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+      isCheckedIn: true,
+      checkInTime: now.toISOString()
+    }));
+    
     // Start the timer
     const interval = setInterval(() => {
       const currentTime = new Date();
@@ -139,6 +162,12 @@ const TimeTracker = () => {
       setTimerInterval(null);
     }
     setElapsedTime('00:00:00');
+    
+    // Clear the check-in state from localStorage
+    localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+      isCheckedIn: false,
+      checkInTime: null
+    }));
   };
 
   const calculateDuration = (start, end) => {
