@@ -336,10 +336,10 @@ const TimeTracker = () => {
                 size="sm"
                 onClick={exportToExcel}
                 className={cn(
-                  "flex items-center gap-1 text-xs bg-transparent",
+                  "flex items-center gap-1 text-xs",
                   isDarkMode 
-                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 active:bg-gray-700" 
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/60 active:bg-gray-100/60 active:text-gray-900"
+                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700" 
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                 )}
               >
                 <Download className="w-3 h-3" />
@@ -352,7 +352,7 @@ const TimeTracker = () => {
                 className={cn(
                   "flex items-center gap-1 text-xs",
                   isDarkMode 
-                    ? "text-red-400 hover:text-red-300 hover:bg-gray-700 bg-transparent" 
+                    ? "text-red-400 hover:text-red-300 hover:bg-gray-700" 
                     : "text-red-500 hover:text-red-600 hover:bg-gray-100"
                 )}
               >
