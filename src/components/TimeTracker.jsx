@@ -16,30 +16,32 @@ const TimeTracker = () => {
   const [editedTime, setEditedTime] = useState('');
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [todayTotalMinutes, setTodayTotalMinutes] = useState(0);
+  const [currentSessionStart, setCurrentSessionStart] = useState(null);
 
   // Helper function for consistent time formatting
-  const formatTime = (date) => {
-    return date.toLocaleTimeString('en-GB', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false 
-    });
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
   useEffect(() => {
-    // Load saved logs
+    // Load saved logs and state
     const savedLogs = localStorage.getItem('timeTrackerLogs');
     if (savedLogs) {
       setLogs(JSON.parse(savedLogs));
     }
     
-    // Load check-in state
     const savedCheckInState = localStorage.getItem('timeTrackerCheckIn');
     if (savedCheckInState) {
       const { isCheckedIn: savedIsCheckedIn, checkInTime: savedCheckInTime } = JSON.parse(savedCheckInState);
       setIsCheckedIn(savedIsCheckedIn);
-      setCheckInTime(savedCheckInTime ? new Date(savedCheckInTime) : null);
+      if (savedIsCheckedIn && savedCheckInTime) {
+        const savedTime = new Date(savedCheckInTime);
+        setCheckInTime(savedTime);
+        setCurrentSessionStart(savedTime);
+      }
     }
 
     // Load theme preference
@@ -48,6 +50,22 @@ const TimeTracker = () => {
       setIsDarkMode(JSON.parse(savedTheme));
     }
   }, []);
+
+  const calculateCompletedTime = () => {
+    const today = new Date().toLocaleDateString();
+    const todayLogs = logs.filter(log => log.date === today);
+    let totalSeconds = 0;
+  
+    for (let i = 0; i < todayLogs.length - 1; i += 2) {
+      if (todayLogs[i]?.type === 'Check In' && todayLogs[i + 1]?.type === 'Check Out') {
+        const start = todayLogs[i].timestamp;
+        const end = todayLogs[i + 1].timestamp;
+        totalSeconds += Math.floor((end - start) / 1000);
+      }
+    }
+  
+    return totalSeconds;
+  };
 
   useEffect(() => {
     // Save logs
@@ -97,33 +115,27 @@ const TimeTracker = () => {
         month: 'long', 
         day: 'numeric' 
       }));
-
-      // Calculate total elapsed time including current session if checked in
-      let totalMinutes = calculateTodayTotal();
+  
+      // Calculate total time
+      let total = calculateCompletedTime();
       
-      if (isCheckedIn && checkInTime) {
-        const currentSessionMinutes = Math.floor((now - checkInTime) / 1000 / 60);
-        totalMinutes += currentSessionMinutes;
+      // Add current session if checked in
+      if (isCheckedIn && currentSessionStart) {
+        const currentSessionSeconds = Math.floor((now - currentSessionStart) / 1000);
+        total += currentSessionSeconds;
       }
-      
-      setTodayTotalMinutes(totalMinutes);
-      
-      // Format for display with smooth seconds
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      const seconds = Math.floor((now.getTime() / 1000) % 60);
-      
-      setElapsedTime(
-        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-      );
+  
+      setTotalSeconds(total);
+      setElapsedTime(formatTime(total));
     }, 1000);
-    
+  
     return () => clearInterval(timer);
-  }, [isCheckedIn, checkInTime, logs]);
+  }, [isCheckedIn, currentSessionStart, logs]);
 
   const handleCheckIn = () => {
     const now = new Date();
     setCheckInTime(now);
+    setCurrentSessionStart(now);
     setIsCheckedIn(true);
     setLogs(prev => [...prev, {
       type: 'Check In',
@@ -136,6 +148,7 @@ const TimeTracker = () => {
   const handleCheckOut = () => {
     const now = new Date();
     setIsCheckedIn(false);
+    setCurrentSessionStart(null);
     setLogs(prev => [...prev, {
       type: 'Check Out',
       date: now.toLocaleDateString(),
