@@ -14,38 +14,60 @@ const TimeTracker = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
+  const [cumulativeTime, setCumulativeTime] = useState('0h 0m');
 
   // Helper function for consistent time formatting
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-GB', { 
       hour: '2-digit', 
       minute: '2-digit',
-      second: '2-digit',
       hour12: false 
     });
   };
 
-  useEffect(() => {
-    // Load saved logs
-    const savedLogs = localStorage.getItem('timeTrackerLogs');
-    if (savedLogs) {
-      setLogs(JSON.parse(savedLogs));
+  const calculateCumulativeTime = () => {
+    const today = new Date().toLocaleDateString();
+    let totalMinutes = 0;
+  
+    for (let i = 0; i < logs.length; i++) {
+      if (logs[i].date === today && logs[i].type === 'Check Out') {
+        // Find the corresponding check-in
+        for (let j = i - 1; j >= 0; j--) {
+          if (logs[j].date === today && logs[j].type === 'Check In') {
+            const duration = (logs[i].timestamp - logs[j].timestamp) / (1000 * 60);
+            totalMinutes += duration;
+            break;
+          }
+        }
+      }
     }
-    
-    // Load check-in state
-    const savedCheckInState = localStorage.getItem('timeTrackerCheckIn');
-    if (savedCheckInState) {
-      const { isCheckedIn: savedIsCheckedIn, checkInTime: savedCheckInTime } = JSON.parse(savedCheckInState);
-      setIsCheckedIn(savedIsCheckedIn);
-      setCheckInTime(savedCheckInTime ? new Date(savedCheckInTime) : null);
+  
+    // Add current session if checked in
+    if (isCheckedIn && checkInTime) {
+      const now = new Date();
+      if (checkInTime.toLocaleDateString() === today) {
+        totalMinutes += (now - checkInTime) / (1000 * 60);
+      }
     }
+  
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.floor(totalMinutes % 60);
+    return `${hours}h ${minutes}m`;
+  };
 
-    // Load theme preference
-    const savedTheme = localStorage.getItem('timeTrackerTheme');
-    if (savedTheme) {
-      setIsDarkMode(JSON.parse(savedTheme));
-    }
-  }, []);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      setCurrentTime(formatTime(now));
+      setCurrentDate(now.toLocaleDateString(undefined, { 
+        weekday: 'long', 
+        month: 'long', 
+        day: 'numeric' 
+      }));
+      setCumulativeTime(calculateCumulativeTime());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [logs, isCheckedIn, checkInTime]);
 
   useEffect(() => {
     // Save logs
@@ -364,36 +386,40 @@ const TimeTracker = () => {
         </CardHeader>
         
         <CardContent>
-          <div className={cn(
-            "text-center py-8 border-y",
-            isDarkMode ? "border-gray-700" : ""
-          )}>
-            <div className={cn(
-              "text-sm mb-1",
-              isDarkMode ? "text-gray-400" : "text-gray-500"
-            )}>{currentDate}</div>
-            <div className={cn(
-              "text-4xl font-bold mb-6 font-mono",
-              isDarkMode ? "text-gray-100" : "text-gray-900"
-            )}>{currentTime}</div>
-            <Button 
-              className={cn(
-                "w-48 h-12 transition-all duration-200 text-lg",
-                isCheckedIn 
-                  ? cn(
-                      "bg-red-500 hover:bg-red-600",
-                      isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
-                    )
-                  : cn(
-                      "bg-green-500 hover:bg-green-600",
-                      isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
-                    )
-              )}
-              onClick={isCheckedIn ? handleCheckOut : handleCheckIn}
-            >
-              {isCheckedIn ? 'Check Out' : 'Check In'}
-            </Button>
-          </div>
+        <div className={cn(
+  "text-center py-8 border-y",
+  isDarkMode ? "border-gray-700" : ""
+)}>
+  <div className={cn(
+    "text-sm mb-1",
+    isDarkMode ? "text-gray-400" : "text-gray-500"
+  )}>
+    {currentDate}
+    <span className="mx-2">•</span>
+    {currentTime}
+  </div>
+  <div className={cn(
+    "text-4xl font-bold mb-6 font-mono",
+    isDarkMode ? "text-gray-100" : "text-gray-900"
+  )}>{cumulativeTime}</div>
+  <Button 
+    className={cn(
+      "w-48 h-12 transition-all duration-200 text-lg",
+      isCheckedIn 
+        ? cn(
+            "bg-red-500 hover:bg-red-600",
+            isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
+          )
+        : cn(
+            "bg-green-500 hover:bg-green-600",
+            isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
+          )
+    )}
+    onClick={isCheckedIn ? handleCheckOut : handleCheckIn}
+  >
+    {isCheckedIn ? 'Check Out' : 'Check In'}
+  </Button>
+</div>
           
           <div className="mt-4">
             <h3 className={cn(
