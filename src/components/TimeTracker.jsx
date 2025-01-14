@@ -85,35 +85,94 @@ const TimeTracker = () => {
   };
 
   const exportToExcel = () => {
-    const groupedLogs = logs.reduce((acc, log) => {
+    // First, group logs by date
+    const groupedByDate = logs.reduce((acc, log) => {
       if (!acc[log.date]) {
-        acc[log.date] = {
-          date: log.date,
-          checkIn: '',
-          checkOut: '',
-          duration: ''
-        };
+        acc[log.date] = [];
       }
-      
-      if (log.type === 'Check In') {
-        acc[log.date].checkIn = log.time;
-      } else {
-        acc[log.date].checkOut = log.time;
-        acc[log.date].duration = log.duration;
-      }
-      
+      acc[log.date].push(log);
       return acc;
     }, {});
 
-    const worksheetData = [
-      ['Date', 'Check In', 'Check Out', 'Duration'],
-      ...Object.values(groupedLogs).map(row => [
-        row.date,
-        row.checkIn,
-        row.checkOut,
-        row.duration
-      ])
-    ];
+    // Process each day's logs to create pairs of check-ins and check-outs
+    const processedData = Object.entries(groupedByDate).map(([date, dayLogs]) => {
+      // Sort logs by timestamp to ensure correct order
+      const sortedLogs = dayLogs.sort((a, b) => a.timestamp - b.timestamp);
+      
+      const pairs = [];
+      let currentPair = {};
+      
+      sortedLogs.forEach((log) => {
+        if (log.type === 'Check In') {
+          // Start new pair
+          currentPair = { date, checkIn: log.time };
+          pairs.push(currentPair);
+        } else if (log.type === 'Check Out') {
+          // Find the last incomplete pair and complete it
+          const lastIncompletePair = [...pairs].reverse().find(pair => !pair.checkOut);
+          if (lastIncompletePair) {
+            lastIncompletePair.checkOut = log.time;
+            lastIncompletePair.duration = log.duration;
+          }
+        }
+      });
+      
+      return pairs;
+    }).flat();
+
+    // Find the maximum number of pairs in a day to determine column count
+    const maxPairsPerDay = Object.values(groupedByDate).reduce((max, dayLogs) => {
+      const pairsCount = dayLogs.filter(log => log.type === 'Check In').length;
+      return Math.max(max, pairsCount);
+    }, 0);
+
+    // Create headers based on the maximum number of pairs
+    const headers = ['Date'];
+    for (let i = 1; i <= maxPairsPerDay; i++) {
+      headers.push(`Check In ${i}`, `Check Out ${i}`);
+    }
+    headers.push('Total Duration');
+
+    // Create the worksheet data
+    const worksheetData = [headers];
+    
+    // Group processed data by date for the final format
+    const finalData = processedData.reduce((acc, pair) => {
+      if (!acc[pair.date]) {
+        acc[pair.date] = { date: pair.date, pairs: [] };
+      }
+      acc[pair.date].pairs.push(pair);
+      return acc;
+    }, {});
+
+    // Helper function to calculate total duration in minutes
+    const calculateTotalDuration = (pairs) => {
+      const totalMinutes = pairs.reduce((total, pair) => {
+        if (pair.duration) {
+          const [hours, minutes] = pair.duration.split('h ').map(part => 
+            parseInt(part.replace('m', '').trim())
+          );
+          return total + (hours * 60 + minutes);
+        }
+        return total;
+      }, 0);
+
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${hours}h ${minutes}m`;
+    };
+
+    // Create rows with all columns
+    Object.values(finalData).forEach(({ date, pairs }) => {
+      const row = [date];
+      for (let i = 0; i < maxPairsPerDay; i++) {
+        const pair = pairs[i] || {};
+        row.push(pair.checkIn || '', pair.checkOut || '');
+      }
+      // Add total duration at the end
+      row.push(calculateTotalDuration(pairs));
+      worksheetData.push(row);
+    });
 
     const ws = XLSX.utils.aoa_to_sheet(worksheetData);
     const wb = XLSX.utils.book_new();
