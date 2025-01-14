@@ -12,6 +12,8 @@ const TimeTracker = () => {
   const [checkInTime, setCheckInTime] = useState(null);
   const [logs, setLogs] = useState([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [editedTime, setEditedTime] = useState('');
 
   // Helper function for consistent time formatting
   const formatTime = (date) => {
@@ -110,6 +112,72 @@ const TimeTracker = () => {
     const hours = Math.floor(diff / 60);
     const minutes = diff % 60;
     return `${hours}h ${minutes}m`;
+  };
+
+  const handleStartEdit = (log) => {
+    setEditingLogId(log.timestamp);
+    setEditedTime(log.time);
+  };
+
+  const handleTimeChange = (e) => {
+    setEditedTime(e.target.value);
+  };
+
+  const handleSaveEdit = (logToEdit) => {
+    // Validate time format (HH:mm:ss)
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+    if (!timeRegex.test(editedTime)) {
+      alert('Please enter a valid time in 24-hour format (HH:mm:ss)');
+      return;
+    }
+
+    const updatedLogs = logs.map(log => {
+      if (log.timestamp === logToEdit.timestamp) {
+        // Create a new Date object from the original date and new time
+        const [hours, minutes, seconds] = editedTime.split(':').map(Number);
+        const newDate = new Date(log.timestamp);
+        newDate.setHours(hours, minutes, seconds);
+
+        // Update the log entry
+        return {
+          ...log,
+          time: editedTime,
+          timestamp: newDate.getTime()
+        };
+      }
+      return log;
+    });
+
+    // Sort logs by timestamp to maintain chronological order
+    const sortedLogs = updatedLogs.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Recalculate durations for all check-out entries
+    const logsWithUpdatedDurations = sortedLogs.map((log, index) => {
+      if (log.type === 'Check Out' && index > 0) {
+        // Find the last check-in before this check-out
+        for (let i = index - 1; i >= 0; i--) {
+          if (sortedLogs[i].type === 'Check In') {
+            return {
+              ...log,
+              duration: calculateDuration(
+                sortedLogs[i].timestamp,
+                log.timestamp
+              )
+            };
+          }
+        }
+      }
+      return log;
+    });
+
+    setLogs(logsWithUpdatedDurations);
+    setEditingLogId(null);
+    setEditedTime('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLogId(null);
+    setEditedTime('');
   };
 
   const toggleTheme = () => {
@@ -244,6 +312,7 @@ const TimeTracker = () => {
                 <div 
                   key={index} 
                   className={cn(
+                    "group",
                     "p-2 rounded-lg text-sm",
                     isDarkMode
                       ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
@@ -266,10 +335,70 @@ const TimeTracker = () => {
                       )}>{log.date}</div>
                     </div>
                     <div className="text-right">
-                      <div className={cn(
-                        "font-mono",
-                        isDarkMode ? "text-gray-100" : "text-gray-900"
-                      )}>{log.time}</div>
+                      {editingLogId === log.timestamp ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editedTime}
+                            onChange={handleTimeChange}
+                            className={cn(
+                              "w-24 px-1 py-0.5 font-mono text-sm rounded border",
+                              isDarkMode 
+                                ? "bg-gray-700 border-gray-600 text-gray-100" 
+                                : "bg-white border-gray-300 text-gray-900"
+                            )}
+                            placeholder="HH:mm:ss"
+                          />
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSaveEdit(log)}
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                isDarkMode
+                                  ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
+                                  : "text-green-600 hover:text-green-700 hover:bg-gray-100"
+                              )}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleCancelEdit}
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                isDarkMode
+                                  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
+                                  : "text-gray-600 hover:text-gray-700 hover:bg-gray-100"
+                              )}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "font-mono",
+                            isDarkMode ? "text-gray-100" : "text-gray-900"
+                          )}>{log.time}</div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEdit(log)}
+                            className={cn(
+                              "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
+                              isDarkMode
+                                ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700"
+                                : "text-blue-600 hover:text-blue-700 hover:bg-gray-100"
+                            )}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      )}
                       {log.duration && (
                         <div className={cn(
                           "text-xs",
