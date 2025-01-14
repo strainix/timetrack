@@ -12,6 +12,16 @@ const TimeTracker = () => {
   const [checkInTime, setCheckInTime] = useState(null);
   const [logs, setLogs] = useState([]);
 
+  // Helper function for consistent time formatting
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('en-GB', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false 
+    });
+  };
+
   useEffect(() => {
     // Load saved logs
     const savedLogs = localStorage.getItem('timeTrackerLogs');
@@ -41,7 +51,7 @@ const TimeTracker = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString());
+      setCurrentTime(formatTime(now));
       setCurrentDate(now.toLocaleDateString(undefined, { 
         weekday: 'long', 
         year: 'numeric', 
@@ -59,7 +69,7 @@ const TimeTracker = () => {
     setLogs(prev => [...prev, {
       type: 'Check In',
       date: now.toLocaleDateString(),
-      time: now.toLocaleTimeString(),
+      time: formatTime(now),
       timestamp: now.getTime()
     }]);
   };
@@ -70,7 +80,7 @@ const TimeTracker = () => {
     setLogs(prev => [...prev, {
       type: 'Check Out',
       date: now.toLocaleDateString(),
-      time: now.toLocaleTimeString(),
+      time: formatTime(now),
       timestamp: now.getTime(),
       duration: checkInTime ? calculateDuration(checkInTime, now) : 'N/A'
     }]);
