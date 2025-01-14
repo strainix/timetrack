@@ -381,7 +381,6 @@ const TimeTracker = () => {
     XLSX.writeFile(wb, fileName);
   };
 
-
   const clearLogs = () => {
     if (window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
       setLogs([]);
