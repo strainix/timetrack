@@ -146,28 +146,25 @@ const TimeTracker = () => {
 
   const handleCheckOut = () => {
     const now = new Date();
-    console.log('Checking out with current check-in time:', checkInTime);
   
-    // Ensure we have the most recent check-in from logs
+    // Get the most recent check-in from logs
     const mostRecentCheckIn = [...logs]
       .reverse()
       .find(log => log.type === 'Check In');
   
-    const checkInTimestamp = mostRecentCheckIn ? mostRecentCheckIn.timestamp : 
-                            checkInTime ? checkInTime.getTime() : null;
+    if (!mostRecentCheckIn) {
+      console.error('No check-in found');
+      return;
+    }
   
-    console.log('Using check-in timestamp:', checkInTimestamp);
-  
-    const duration = checkInTimestamp ? 
-      calculateDuration(checkInTimestamp, now.getTime()) : 'N/A';
-  
-    console.log('Calculated duration:', duration);
+    const checkOutTime = now.getTime();
+    const duration = calculateDuration(mostRecentCheckIn.timestamp, checkOutTime);
   
     setLogs(prev => [...prev, {
       type: 'Check Out',
       date: now.toLocaleDateString(),
       time: formatTime(now),
-      timestamp: now.getTime(),
+      timestamp: checkOutTime,
       duration
     }]);
   
@@ -217,13 +214,12 @@ const TimeTracker = () => {
     newDate.setHours(hours, minutes, seconds);
     const newTimestamp = newDate.getTime();
   
-    console.log('Editing timestamp:', {
-      originalTimestamp: logToEdit.timestamp,
-      newTimestamp,
-      newDate: newDate.toISOString()
-    });
+    // Find if this is the active check-in before updating logs
+    const isEditingActiveCheckIn = isCheckedIn && 
+      logToEdit.type === 'Check In' && 
+      logToEdit.timestamp === checkInTime?.getTime();
   
-    // Update logs first
+    // Update logs
     const updatedLogs = logs.map(log => {
       if (log.timestamp === logToEdit.timestamp) {
         return {
@@ -235,26 +231,11 @@ const TimeTracker = () => {
       return log;
     });
   
-    // Sort and update durations
+    // Sort logs by timestamp
     const sortedLogs = updatedLogs.sort((a, b) => a.timestamp - b.timestamp);
   
-    // Find the most recent check-in without a check-out
-    const activeCheckIn = [...sortedLogs]
-      .reverse()
-      .find(log => 
-        log.type === 'Check In' && 
-        !sortedLogs.some(l => 
-          l.type === 'Check Out' && 
-          l.timestamp > log.timestamp
-        )
-      );
-  
-    console.log('Active check-in found:', activeCheckIn);
-  
-    // If we're editing the active check-in
-    if (isCheckedIn && activeCheckIn && activeCheckIn.timestamp === newTimestamp) {
-      console.log('Updating active timer with new timestamp');
-  
+    // If we were editing the active check-in, update the timer
+    if (isEditingActiveCheckIn) {
       // Clear existing timer
       if (timerInterval) {
         clearInterval(timerInterval);
@@ -269,18 +250,17 @@ const TimeTracker = () => {
         checkInTime: newDate.toISOString()
       }));
   
+      // Set initial elapsed time
+      const initialDiff = Date.now() - newDate.getTime();
+      setElapsedTime(formatElapsedTime(initialDiff));
+  
       // Start new timer
       const newInterval = setInterval(() => {
         const now = new Date();
         const timeDiff = now - newDate;
-        const formattedTime = formatElapsedTime(timeDiff);
-        setElapsedTime(formattedTime);
+        setElapsedTime(formatElapsedTime(timeDiff));
       }, 1000);
   
-      // Set initial elapsed time
-      const initialDiff = Date.now() - newDate.getTime();
-      const initialElapsed = formatElapsedTime(initialDiff);
-      setElapsedTime(initialElapsed);
       setTimerInterval(newInterval);
     }
   
@@ -298,8 +278,6 @@ const TimeTracker = () => {
       }
       return log;
     });
-  
-    console.log('Final logs update:', logsWithDurations);
   
     setLogs(logsWithDurations);
     setEditingLogId(null);
