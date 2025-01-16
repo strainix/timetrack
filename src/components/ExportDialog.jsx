@@ -17,6 +17,16 @@ const ExportDialog = ({ logs, onClose }) => {
   const [shareCode, setShareCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasSavedCode, setHasSavedCode] = useState(false);
+
+  useEffect(() => {
+    // Load saved share code from localStorage
+    const savedCode = localStorage.getItem(STORAGE_KEY);
+    if (savedCode) {
+      setShareCode(savedCode);
+      setHasSavedCode(true);
+    }
+  }, []);
 
   const generateExcelFile = (logsData) => {
     // Existing Excel generation logic
@@ -105,27 +115,44 @@ const ExportDialog = ({ logs, onClose }) => {
     generateExcelFile(logs);
   };
 
-  const generateShareCode = async () => {
+  const generateOrSyncCode = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await fetch(JSONBIN_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': JSONBIN_API_KEY,
-          'X-Bin-Private': false,
-        },
-        body: JSON.stringify({ logs }),
-      });
-      
-      if (!response.ok) throw new Error('Failed to generate share code');
-      
-      const data = await response.json();
-      const binId = data.metadata.id;
-      setShareCode(binId);
+      // If we already have a code, update the existing bin
+      if (hasSavedCode) {
+        const response = await fetch(`${JSONBIN_API_URL}/${shareCode}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': JSONBIN_API_KEY,
+          },
+          body: JSON.stringify({ logs }),
+        });
+        
+        if (!response.ok) throw new Error('Failed to sync data');
+      } else {
+        // Create new bin
+        const response = await fetch(JSONBIN_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': JSONBIN_API_KEY,
+            'X-Bin-Private': false,
+          },
+          body: JSON.stringify({ logs }),
+        });
+        
+        if (!response.ok) throw new Error('Failed to generate share code');
+        
+        const data = await response.json();
+        const binId = data.metadata.id;
+        setShareCode(binId);
+        setHasSavedCode(true);
+        localStorage.setItem(STORAGE_KEY, binId);
+      }
     } catch (err) {
-      setError('Failed to generate share code. Please try again.');
+      setError(hasSavedCode ? 'Failed to sync data. Please try again.' : 'Failed to generate share code. Please try again.');
       console.error('Error:', err);
     } finally {
       setIsLoading(false);
@@ -151,6 +178,12 @@ const ExportDialog = ({ logs, onClose }) => {
       
       const data = await response.json();
       generateExcelFile(data.record.logs);
+      
+      // Save the code if it's not already saved
+      if (!hasSavedCode) {
+        setHasSavedCode(true);
+        localStorage.setItem(STORAGE_KEY, shareCode);
+      }
     } catch (err) {
       setError('Failed to fetch shared data. Please check the code and try again.');
       console.error('Error:', err);
@@ -160,14 +193,14 @@ const ExportDialog = ({ logs, onClose }) => {
   };
 
   return (
-    <DialogContent className="sm:max-w-md">
+    <DialogContent className="sm:max-w-md w-[95%] sm:w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg border dark:border-gray-700">
       <DialogHeader>
-        <DialogTitle>Export Time Tracking Data</DialogTitle>
+        <DialogTitle className="text-gray-900 dark:text-gray-100">Export Time Tracking Data</DialogTitle>
       </DialogHeader>
       <div className="flex flex-col gap-6">
         <Button
           onClick={handleDownload}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
           variant="outline"
         >
           <Download className="w-4 h-4" />
@@ -180,16 +213,20 @@ const ExportDialog = ({ logs, onClose }) => {
               placeholder="Share code"
               value={shareCode}
               onChange={(e) => setShareCode(e.target.value)}
-              className="flex-1"
+              className="flex-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
             />
             <Button
-              onClick={generateShareCode}
+              onClick={generateOrSyncCode}
               variant="outline"
               className="flex items-center gap-2"
               disabled={isLoading}
             >
-              <Share2 className="w-4 h-4" />
-              Generate
+              {hasSavedCode ? (
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              ) : (
+                <Share2 className="w-4 h-4" />
+              )}
+              {hasSavedCode ? 'Sync' : 'Generate'}
             </Button>
           </div>
           <Button
