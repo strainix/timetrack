@@ -6,11 +6,8 @@ import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
 import {
   Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from '../components/ui/dialog';
 import ExportDialog from './ExportDialog';
 
 const TimeTracker = () => {
