@@ -4,6 +4,14 @@ import { Button } from './ui/button';
 import { Clock, Download, Trash2, Moon, Sun } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import ExportDialog from './ExportDialog';
 
 const TimeTracker = () => {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
@@ -293,103 +301,6 @@ const TimeTracker = () => {
     setIsDarkMode(!isDarkMode);
   };
 
-  const exportToExcel = () => {
-    // First, group logs by date
-    const groupedByDate = logs.reduce((acc, log) => {
-      if (!acc[log.date]) {
-        acc[log.date] = [];
-      }
-      acc[log.date].push(log);
-      return acc;
-    }, {});
-
-    // Process each day's logs to create pairs of check-ins and check-outs
-    const processedData = Object.entries(groupedByDate).map(([date, dayLogs]) => {
-      // Sort logs by timestamp to ensure correct order
-      const sortedLogs = dayLogs.sort((a, b) => a.timestamp - b.timestamp);
-      
-      const pairs = [];
-      let currentPair = {};
-      
-      sortedLogs.forEach((log) => {
-        if (log.type === 'Check In') {
-          // Start new pair
-          currentPair = { date, checkIn: log.time };
-          pairs.push(currentPair);
-        } else if (log.type === 'Check Out') {
-          // Find the last incomplete pair and complete it
-          const lastIncompletePair = [...pairs].reverse().find(pair => !pair.checkOut);
-          if (lastIncompletePair) {
-            lastIncompletePair.checkOut = log.time;
-            lastIncompletePair.duration = log.duration;
-          }
-        }
-      });
-      
-      return pairs;
-    }).flat();
-
-    // Find the maximum number of pairs in a day to determine column count
-    const maxPairsPerDay = Object.values(groupedByDate).reduce((max, dayLogs) => {
-      const pairsCount = dayLogs.filter(log => log.type === 'Check In').length;
-      return Math.max(max, pairsCount);
-    }, 0);
-
-    // Create headers based on the maximum number of pairs
-    const headers = ['Date'];
-    for (let i = 1; i <= maxPairsPerDay; i++) {
-      headers.push(`Check In ${i}`, `Check Out ${i}`);
-    }
-    headers.push('Total Duration');
-
-    // Create the worksheet data
-    const worksheetData = [headers];
-    
-    // Group processed data by date for the final format
-    const finalData = processedData.reduce((acc, pair) => {
-      if (!acc[pair.date]) {
-        acc[pair.date] = { date: pair.date, pairs: [] };
-      }
-      acc[pair.date].pairs.push(pair);
-      return acc;
-    }, {});
-
-    // Helper function to calculate total duration in minutes
-    const calculateTotalDuration = (pairs) => {
-      const totalMinutes = pairs.reduce((total, pair) => {
-        if (pair.duration) {
-          const [hours, minutes] = pair.duration.split('h ').map(part => 
-            parseInt(part.replace('m', '').trim())
-          );
-          return total + (hours * 60 + minutes);
-        }
-        return total;
-      }, 0);
-
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      return `${hours}h ${minutes}m`;
-    };
-
-    // Create rows with all columns
-    Object.values(finalData).forEach(({ date, pairs }) => {
-      const row = [date];
-      for (let i = 0; i < maxPairsPerDay; i++) {
-        const pair = pairs[i] || {};
-        row.push(pair.checkIn || '', pair.checkOut || '');
-      }
-      // Add total duration at the end
-      row.push(calculateTotalDuration(pairs));
-      worksheetData.push(row);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Time Logs');
-    const fileName = `time_logs_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-  };
-
   const clearLogs = () => {
     if (window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
       setLogs([]);
@@ -439,20 +350,24 @@ const TimeTracker = () => {
                   <Moon className="w-4 h-4" />
                 )}
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={exportToExcel}
-                className={cn(
-                  "flex items-center gap-1 text-xs",
-                  isDarkMode 
-                    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
-                )}
-              >
-                <Download className="w-3 h-3" />
-                Export
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={cn(
+                      "flex items-center gap-1 text-xs",
+                      isDarkMode 
+                        ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
+                    )}
+                  >
+                    <Download className="w-3 h-3" />
+                    Export
+                  </Button>
+                </DialogTrigger>
+                <ExportDialog logs={logs} />
+              </Dialog>
               <Button 
                 variant="outline" 
                 size="sm"
