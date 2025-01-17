@@ -9,6 +9,7 @@ import {
   DialogTrigger,
 } from '../components/ui/dialog';
 import ExportDialog from './ExportDialog';
+import CreditCardBadge from './CreditCardBadge';
 
 const TimeTracker = () => {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
@@ -391,7 +392,7 @@ const TimeTracker = () => {
 
   return (
     <div className={cn(
-      "min-h-screen w-full p-2 transition-colors duration-200",
+      "min-h-screen w-full p-2 pb-16 transition-colors duration-200 relative",
       isDarkMode ? "bg-gray-900" : "bg-white"
     )}>
       <Card className={cn(
@@ -627,6 +628,7 @@ const TimeTracker = () => {
           </div>
         </CardContent>
       </Card>
+      <CreditCardBadge />
     </div>
   );
 };
