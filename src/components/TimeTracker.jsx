@@ -189,6 +189,71 @@ const TimeTracker = () => {
     }));
   };
 
+  const handleRemoveLog = (logToRemove) => {
+    // Ask for confirmation
+    if (!window.confirm('Are you sure you want to remove this entry?')) {
+      return;
+    }
+  
+    // Function to find a matching check-in/check-out pair
+    const findPairedLog = (log, logs) => {
+      if (log.type === 'Check In') {
+        // Find the next check-out after this check-in
+        return logs.find(l => 
+          l.type === 'Check Out' && 
+          l.timestamp > log.timestamp &&
+          !logs.some(other => 
+            other.type === 'Check In' && 
+            other.timestamp > log.timestamp && 
+            other.timestamp < l.timestamp
+          )
+        );
+      } else {
+        // Find the previous check-in before this check-out
+        return logs.find(l => 
+          l.type === 'Check In' && 
+          l.timestamp < log.timestamp &&
+          !logs.some(other => 
+            other.type === 'Check Out' && 
+            other.timestamp > l.timestamp && 
+            other.timestamp < log.timestamp
+          )
+        );
+      }
+    };
+  
+    // Get all entries to remove (the clicked one and its pair)
+    const pairedLog = findPairedLog(logToRemove, logs);
+    const logsToRemove = new Set([logToRemove.timestamp]);
+    if (pairedLog) {
+      logsToRemove.add(pairedLog.timestamp);
+    }
+  
+    // Update logs state
+    setLogs(prevLogs => {
+      const newLogs = prevLogs.filter(log => !logsToRemove.has(log.timestamp));
+      // Save to localStorage
+      localStorage.setItem('timeTrackerLogs', JSON.stringify(newLogs));
+      return newLogs;
+    });
+  
+    // If we're removing the active check-in, reset the check-in state
+    if (logToRemove.type === 'Check In' && 
+        logToRemove.timestamp === checkInTime?.getTime()) {
+      setIsCheckedIn(false);
+      setCheckInTime(null);
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+      setTimerInterval(null);
+      setElapsedTime('00:00:00');
+      localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+        isCheckedIn: false,
+        checkInTime: null
+      }));
+    }
+  };
+
   const calculateDuration = (start, end) => {
     const diff = Math.floor((end - start) / 1000 / 60);
     const hours = Math.floor(diff / 60);
@@ -365,20 +430,6 @@ const TimeTracker = () => {
                 </DialogTrigger>
                 <ExportDialog logs={logs} />
               </Dialog>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={clearLogs}
-                className={cn(
-                  "flex items-center gap-1 text-xs",
-                  isDarkMode 
-                    ? "border-gray-600 text-red-400 hover:text-red-300 hover:bg-gray-700 bg-transparent" 
-                    : "text-red-500 hover:text-red-600 hover:bg-gray-100 bg-transparent"
-                )}
-              >
-                <Trash2 className="w-3 h-3" />
-                Clear
-              </Button>
             </div>
           </CardTitle>
         </CardHeader>
@@ -420,108 +471,245 @@ const TimeTracker = () => {
               "text-sm font-medium mb-3",
               isDarkMode ? "text-gray-300" : "text-gray-500"
             )}>Recent Activity</h3>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {logs.slice().reverse().map((log, index) => (
-                <div 
-                  key={index} 
-                  className={cn(
-                    "group",
-                    "p-2 rounded-lg text-sm",
-                    isDarkMode
-                      ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
-                      : log.type === 'Check In' ? 'bg-green-50' : 'bg-red-50'
-                  )}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className={cn(
-                        "font-medium",
-                        log.type === 'Check In' 
-                          ? isDarkMode ? 'text-green-400' : 'text-green-600'
-                          : isDarkMode ? 'text-red-400' : 'text-red-600'
-                      )}>
-                        {log.type}
-                      </span>
-                      <div className={cn(
-                        "text-xs",
-                        isDarkMode ? "text-gray-400" : "text-gray-500"
-                      )}>{log.date}</div>
+            <div className="max-h-64 overflow-y-auto px-1">
+              {(() => {
+                // First, pair up the logs
+                const pairedLogs = logs.slice().reverse().reduce((acc, log) => {
+                  if (log.type === 'Check In') {
+                    // Find matching check-out
+                    const matchingCheckOut = logs.find(l => 
+                      l.type === 'Check Out' && 
+                      l.timestamp > log.timestamp &&
+                      !logs.some(other => 
+                        other.type === 'Check In' && 
+                        other.timestamp > log.timestamp && 
+                        other.timestamp < l.timestamp
+                      )
+                    );
+                    
+                    acc.push({
+                      checkIn: log,
+                      checkOut: matchingCheckOut,
+                      id: log.timestamp
+                    });
+                  }
+                  return acc;
+                }, []);
+
+                return pairedLogs.map((pair) => (
+                  <div 
+                    key={pair.id}
+                    className={cn(
+                      "mb-2 rounded-lg border group/pair",
+                      isDarkMode ? "border-gray-700" : "border-gray-200"
+                    )}
+                  >
+                    {/* Check In Entry */}
+                    <div 
+                      className={cn(
+                        "group p-2 rounded-t-lg text-sm",
+                        isDarkMode ? 'bg-green-900/20' : 'bg-green-50'
+                      )}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className={cn(
+                            "font-medium",
+                            isDarkMode ? 'text-green-400' : 'text-green-600'
+                          )}>
+                            Check In
+                          </span>
+                          <div className={cn(
+                            "text-xs",
+                            isDarkMode ? "text-gray-400" : "text-gray-500"
+                          )}>{pair.checkIn.date}</div>
+                        </div>
+                        <div className="text-right">
+                          {editingLogId === pair.checkIn.timestamp ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editedTime}
+                                onChange={handleTimeChange}
+                                className={cn(
+                                  "w-24 px-1 py-0.5 font-mono text-sm rounded border",
+                                  isDarkMode 
+                                    ? "bg-gray-700 border-gray-600 text-gray-100" 
+                                    : "bg-white border-gray-300 text-gray-900"
+                                )}
+                                placeholder="HH:mm:ss"
+                              />
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleSaveEdit(pair.checkIn)}
+                                  className={cn(
+                                    "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
+                                    isDarkMode
+                                      ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
+                                      : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
+                                  )}
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={handleCancelEdit}
+                                  className={cn(
+                                    "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
+                                    isDarkMode
+                                      ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
+                                      : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
+                                  )}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleStartEdit(pair.checkIn)}
+                                className={cn(
+                                  "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80",
+                                  isDarkMode
+                                    ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
+                                    : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
+                                )}
+                                tabIndex={-1}
+                              >
+                                Edit
+                              </Button>
+                              <div className={cn(
+                                "font-mono",
+                                isDarkMode ? "text-gray-100" : "text-gray-900"
+                              )}>{pair.checkIn.time}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      {editingLogId === log.timestamp ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={editedTime}
-                            onChange={handleTimeChange}
-                            className={cn(
-                              "w-24 px-1 py-0.5 font-mono text-sm rounded border",
-                              isDarkMode 
-                                ? "bg-gray-700 border-gray-600 text-gray-100" 
-                                : "bg-white border-gray-300 text-gray-900"
+
+                    {/* Check Out Entry */}
+                    {pair.checkOut && (
+                      <div 
+                        className={cn(
+                          "group p-2 rounded-b-lg text-sm border-t",
+                          isDarkMode ? 'bg-red-900/20 border-gray-700' : 'bg-red-50 border-gray-200'
+                        )}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className={cn(
+                              "font-medium",
+                              isDarkMode ? 'text-red-400' : 'text-red-600'
+                            )}>
+                              Check Out
+                            </span>
+                            <div className={cn(
+                              "text-xs",
+                              isDarkMode ? "text-gray-400" : "text-gray-500"
+                            )}>{pair.checkOut.date}</div>
+                          </div>
+                          <div className="text-right">
+                            {editingLogId === pair.checkOut.timestamp ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editedTime}
+                                  onChange={handleTimeChange}
+                                  className={cn(
+                                    "w-24 px-1 py-0.5 font-mono text-sm rounded border",
+                                    isDarkMode 
+                                      ? "bg-gray-700 border-gray-600 text-gray-100" 
+                                      : "bg-white border-gray-300 text-gray-900"
+                                  )}
+                                  placeholder="HH:mm:ss"
+                                />
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleSaveEdit(pair.checkOut)}
+                                    className={cn(
+                                      "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
+                                      isDarkMode
+                                        ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
+                                        : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
+                                    )}
+                                  >
+                                    Save
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleCancelEdit}
+                                    className={cn(
+                                      "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
+                                      isDarkMode
+                                        ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
+                                        : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
+                                    )}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleStartEdit(pair.checkOut)}
+                                  className={cn(
+                                    "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80",
+                                    isDarkMode
+                                      ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
+                                      : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
+                                  )}
+                                  tabIndex={-1}
+                                >
+                                  Edit
+                                </Button>
+                                <div className={cn(
+                                  "font-mono",
+                                  isDarkMode ? "text-gray-100" : "text-gray-900"
+                                )}>{pair.checkOut.time}</div>
+                              </div>
                             )}
-                            placeholder="HH:mm:ss"
-                          />
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSaveEdit(log)}
-                              className={cn(
-                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
-                                isDarkMode
-                                  ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
-                                  : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
-                              )}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={handleCancelEdit}
-                              className={cn(
-                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
-                                isDarkMode
-                                  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
-                                  : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
-                              )}
-                            >
-                              Cancel
-                            </Button>
+                            {pair.checkOut.duration && (
+                              <div className={cn(
+                                "text-xs",
+                                isDarkMode ? "text-gray-400" : "text-gray-500"
+                              )}>{pair.checkOut.duration}</div>
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleStartEdit(log)}
-                            className={cn(
-                              "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity bg-transparent hover:bg-opacity-80",
-                              isDarkMode
-                                ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
-                                : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
-                            )}
-                          >
-                            Edit
-                          </Button>
-                          <div className={cn(
-                            "font-mono",
-                            isDarkMode ? "text-gray-100" : "text-gray-900"
-                          )}>{log.time}</div>
-                        </div>
+                      </div>
+                    )}
+
+                    {/* Delete Button for the Pair */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveLog(pair.checkIn)}
+                      className={cn(
+                        "h-6 px-2 text-xs w-full invisible group-hover/pair:visible bg-transparent hover:bg-opacity-80 rounded-none border-t",
+                        isDarkMode
+                          ? "text-red-400 hover:text-red-300 hover:bg-gray-700 border-gray-700" 
+                          : "text-red-600 hover:text-red-700 hover:bg-gray-100/60 border-gray-200"
                       )}
-                      {log.duration && (
-                        <div className={cn(
-                          "text-xs",
-                          isDarkMode ? "text-gray-400" : "text-gray-500"
-                        )}>{log.duration}</div>
-                      )}
-                    </div>
+                      tabIndex={-1}
+                    >
+                      Remove Entry
+                    </Button>
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
         </CardContent>
