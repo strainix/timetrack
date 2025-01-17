@@ -608,8 +608,8 @@ const TimeTracker = () => {
   size="sm"
   onClick={() => handleRemoveLog(log)}
   className={cn(
-    "absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full invisible group-hover:visible",
-    "flex items-center justify-center text-lg leading-none",
+    "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
+    "flex items-center justify-center text-base leading-none",
     "border shadow-sm",
     isDarkMode
       ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
