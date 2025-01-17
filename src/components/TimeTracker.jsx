@@ -570,21 +570,23 @@ const TimeTracker = () => {
 
                     {/* Only show remove button if it's a check-out or an unpaired check-in */}
                     {(log.type === 'Check Out' || !isPaired) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveLog(log)}
-                        className={cn(
-                          "absolute top-2 right-2 h-6 w-6 p-0 rounded-full invisible group-hover:visible bg-transparent text-lg leading-none",
-                          isDarkMode
-                            ? "text-red-400 hover:text-red-300 hover:bg-red-900/30" 
-                            : "text-red-600 hover:text-red-700 hover:bg-red-100"
-                        )}
-                        tabIndex={-1}
-                      >
-                        ×
-                      </Button>
-                    )}
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => handleRemoveLog(log)}
+    className={cn(
+      "absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
+      "flex items-center justify-center text-base leading-none font-normal",
+      "border",
+      isDarkMode
+        ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
+        : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
+    )}
+    tabIndex={-1}
+  >
+    ×
+  </Button>
+)}
                   </div>
                 );
               })}
