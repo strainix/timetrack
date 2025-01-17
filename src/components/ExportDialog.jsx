@@ -195,12 +195,6 @@ const ExportDialog = ({ logs, onClose }) => {
 
   return (
     <DialogContent className="sm:max-w-md w-[95%] sm:w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg border dark:border-gray-700">
-  <button
-    onClick={onClose}
-    className="absolute right-4 top-4 font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-  >
-    ×
-  </button>
       <DialogHeader>
         <DialogTitle className="text-gray-900 dark:text-gray-100">Export Time Tracking Data</DialogTitle>
       </DialogHeader>
