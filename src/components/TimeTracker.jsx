@@ -220,9 +220,42 @@ const TimeTracker = () => {
       return newLogs;
     });
   
-    // If we're removing the active check-in, reset the check-in state
-    if (logToRemove.type === 'Check In' && 
+    // Handle removal of a check-out entry
+    if (logToRemove.type === 'Check Out') {
+      // Find the corresponding check-in
+      const matchingCheckIn = logs.find(l => 
+        l.type === 'Check In' && 
+        l.timestamp < logToRemove.timestamp &&
+        !logs.some(other => 
+          other.type === 'Check Out' && 
+          other.timestamp > l.timestamp && 
+          other.timestamp < logToRemove.timestamp
+        )
+      );
+  
+      // If we found the matching check-in, restart the timer
+      if (matchingCheckIn) {
+        const checkInTime = new Date(matchingCheckIn.timestamp);
+        setCheckInTime(checkInTime);
+        setIsCheckedIn(true);
+  
+        // Start the timer
+        const interval = setInterval(() => {
+          const currentTime = new Date();
+          const timeDiff = currentTime - checkInTime;
+          setElapsedTime(formatElapsedTime(timeDiff));
+        }, 1000);
+        setTimerInterval(interval);
+  
+        // Store check-in state
+        localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+          isCheckedIn: true,
+          checkInTime: checkInTime.toISOString()
+        }));
+      }
+    } else if (logToRemove.type === 'Check In' && 
         logToRemove.timestamp === checkInTime?.getTime()) {
+      // Reset check-in state if removing active check-in
       setIsCheckedIn(false);
       setCheckInTime(null);
       if (timerInterval) {
@@ -454,7 +487,7 @@ const TimeTracker = () => {
               "text-sm font-medium mb-3",
               isDarkMode ? "text-gray-300" : "text-gray-500"
             )}>Recent Activity</h3>
-            <div className="max-h-64 overflow-y-auto px-1">
+            <div className="max-h-64 overflow-y-auto overflow-x-visible px-1 py-2">
               {logs.slice().reverse().map((log, index, reversedLogs) => {
                 // Check if this log is paired (for check-in entries)
                 const isPaired = log.type === 'Check In' && reversedLogs.some(l => 
@@ -571,21 +604,21 @@ const TimeTracker = () => {
                     {/* Only show remove button if it's a check-out or an unpaired check-in */}
                     {(log.type === 'Check Out' || !isPaired) && (
   <Button
-    variant="ghost"
-    size="sm"
-    onClick={() => handleRemoveLog(log)}
-    className={cn(
-      "absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
-      "flex items-center justify-center text-base leading-none font-normal",
-      "border",
-      isDarkMode
-        ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
-        : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
-    )}
-    tabIndex={-1}
-  >
-    ×
-  </Button>
+  variant="ghost"
+  size="sm"
+  onClick={() => handleRemoveLog(log)}
+  className={cn(
+    "absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full invisible group-hover:visible",
+    "flex items-center justify-center text-lg leading-none",
+    "border shadow-sm",
+    isDarkMode
+      ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
+      : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
+  )}
+  tabIndex={-1}
+>
+  ×
+</Button>
 )}
                   </div>
                 );
