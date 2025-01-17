@@ -482,12 +482,12 @@ const TimeTracker = () => {
             </Button>
           </div>
           
-          <div className="mt-4">
+          <div className="mt-4 overflow-x-hidden">
             <h3 className={cn(
               "text-sm font-medium mb-3",
               isDarkMode ? "text-gray-300" : "text-gray-500"
             )}>Recent Activity</h3>
-            <div className="max-h-64 overflow-y-auto overflow-x-visible px-1 py-2">
+            <div className="max-h-64 overflow-y-auto px-1 pr-3 py-2 relative">
               {logs.slice().reverse().map((log, index, reversedLogs) => {
                 // Check if this log is paired (for check-in entries)
                 const isPaired = log.type === 'Check In' && reversedLogs.some(l => 
