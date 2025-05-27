@@ -313,8 +313,8 @@ const ExportDialog = ({ logs, onClose, onImportLogs }) => {
                         className="flex-1 flex items-center gap-2"
                         disabled={isLoading}
                       >
-                        <Upload className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        Sync Data
+                        <Upload className="w-4 h-4" />
+                        {isLoading ? 'Syncing...' : 'Sync Data'}
                       </Button>
                       <Button
                         onClick={handleSwitchCode}
