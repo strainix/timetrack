@@ -7,7 +7,7 @@ import {
 } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Download, Share2, Upload, RefreshCw } from 'lucide-react';
+import { Download, Share2, Upload, RefreshCw, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev'; // Replace with your worker URL
@@ -18,6 +18,9 @@ const ExportDialog = ({ logs, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasSavedCode, setHasSavedCode] = useState(false);
+  const [activeTab, setActiveTab] = useState('local'); // 'local', 'share', 'import'
+  const [importCode, setImportCode] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     // Load saved share code from localStorage
@@ -25,6 +28,7 @@ const ExportDialog = ({ logs, onClose }) => {
     if (savedCode) {
       setShareCode(savedCode);
       setHasSavedCode(true);
+      setActiveTab('share'); // Switch to share tab if user has a code
     }
   }, []);
 
@@ -115,40 +119,51 @@ const ExportDialog = ({ logs, onClose }) => {
     generateExcelFile(logs);
   };
 
-  const generateOrSyncCode = async () => {
+  const generateNewCode = async () => {
     setIsLoading(true);
     setError('');
+    setSuccessMessage('');
     try {
-      if (hasSavedCode) {
-        // Update existing data
-        const response = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ logs }),
-        });
-        
-        if (!response.ok) throw new Error('Failed to sync data');
-      } else {
-        // Create new entry with generated passphrase
-        const response = await fetch(`${WORKER_API_URL}/api/timesheet`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ logs }),
-        });
-        
-        if (!response.ok) throw new Error('Failed to generate share code');
-        
-        const data = await response.json();
-        setShareCode(data.passphrase);
-        setHasSavedCode(true);
-        localStorage.setItem(STORAGE_KEY, data.passphrase);
-      }
+      const response = await fetch(`${WORKER_API_URL}/api/timesheet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ logs }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to generate share code');
+      
+      const data = await response.json();
+      setShareCode(data.passphrase);
+      setHasSavedCode(true);
+      localStorage.setItem(STORAGE_KEY, data.passphrase);
+      setSuccessMessage(`Share code generated: ${data.passphrase}`);
     } catch (err) {
-      setError(hasSavedCode ? 'Failed to sync data. Please try again.' : 'Failed to generate share code. Please try again.');
+      setError('Failed to generate share code. Please try again.');
+      console.error('Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const syncExistingCode = async () => {
+    setIsLoading(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const response = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ logs }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to sync data');
+      setSuccessMessage('Data synced successfully!');
+    } catch (err) {
+      setError('Failed to sync data. Please try again.');
       console.error('Error:', err);
     } finally {
       setIsLoading(false);
@@ -156,26 +171,33 @@ const ExportDialog = ({ logs, onClose }) => {
   };
 
   const fetchSharedData = async () => {
-    if (!shareCode) {
+    if (!importCode.trim()) {
       setError('Please enter a share code');
       return;
     }
 
     setIsLoading(true);
     setError('');
+    setSuccessMessage('');
     try {
-      const response = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`);
+      const response = await fetch(`${WORKER_API_URL}/api/timesheet/${importCode.trim()}`);
       
       if (!response.ok) throw new Error('Failed to fetch shared data');
       
       const data = await response.json();
       generateExcelFile(data.logs);
       
-      // Save the code if it's not already saved
-      if (!hasSavedCode) {
-        setHasSavedCode(true);
-        localStorage.setItem(STORAGE_KEY, shareCode);
-      }
+      // Save this code as the new active code
+      setShareCode(importCode.trim());
+      setHasSavedCode(true);
+      localStorage.setItem(STORAGE_KEY, importCode.trim());
+      setSuccessMessage('Data downloaded successfully!');
+      
+      // Switch to share tab
+      setTimeout(() => {
+        setActiveTab('share');
+        setImportCode('');
+      }, 1500);
     } catch (err) {
       setError('Failed to fetch shared data. Please check the code and try again.');
       console.error('Error:', err);
@@ -184,56 +206,169 @@ const ExportDialog = ({ logs, onClose }) => {
     }
   };
 
+  const handleSwitchCode = () => {
+    if (window.confirm('Switch to a different sync code? Your current code will be replaced.')) {
+      setActiveTab('import');
+      setImportCode('');
+      setError('');
+      setSuccessMessage('');
+    }
+  };
+
   return (
     <DialogContent className="sm:max-w-md w-[95%] sm:w-full max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg border dark:border-gray-700">
       <DialogHeader>
         <DialogTitle className="text-gray-900 dark:text-gray-100">Export Time Tracking Data</DialogTitle>
       </DialogHeader>
-      <div className="flex flex-col gap-6">
-        <Button
-          onClick={handleDownload}
-          className="flex items-center gap-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
-          variant="outline"
-        >
-          <Download className="w-4 h-4" />
-          Download Excel File
-        </Button>
-        
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Share code (e.g. blue-cat-7)"
-              value={shareCode}
-              onChange={(e) => setShareCode(e.target.value)}
-              className="flex-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
-            />
-            <Button
-              onClick={generateOrSyncCode}
-              variant="outline"
-              className="flex items-center gap-2"
-              disabled={isLoading}
-            >
-              {hasSavedCode ? (
-                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              ) : (
-                <Share2 className="w-4 h-4" />
-              )}
-              {hasSavedCode ? 'Sync' : 'Generate'}
-            </Button>
-          </div>
+      
+      <div className="flex flex-col gap-4">
+        {/* Tab buttons */}
+        <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
           <Button
-            onClick={fetchSharedData}
-            variant="outline"
-            className="w-full flex items-center gap-2"
-            disabled={isLoading || !shareCode}
+            onClick={() => setActiveTab('local')}
+            variant="ghost"
+            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'local'
+                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-600'
+                : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/50'
+            }`}
           >
-            <Upload className="w-4 h-4" />
-            Fetch & Download
+            Local Export
+          </Button>
+          <Button
+            onClick={() => setActiveTab('share')}
+            variant="ghost"
+            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'share'
+                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-600'
+                : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/50'
+            }`}
+          >
+            Sync
+          </Button>
+          <Button
+            onClick={() => setActiveTab('import')}
+            variant="ghost"
+            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'import'
+                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-600'
+                : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/50'
+            }`}
+          >
+            Import
           </Button>
         </div>
-        
+
+        {/* Tab content */}
+        <div className="space-y-4">
+          {activeTab === 'local' && (
+            <>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Download your time tracking data as an Excel file.
+              </p>
+              <Button
+                onClick={handleDownload}
+                className="flex items-center gap-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
+                variant="outline"
+              >
+                <Download className="w-4 h-4" />
+                Download Excel File
+              </Button>
+            </>
+          )}
+
+          {activeTab === 'share' && (
+            <>
+              {hasSavedCode ? (
+                <>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Your sync code:
+                      </p>
+                      <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
+                        <code className="text-lg font-mono font-semibold text-blue-600 dark:text-blue-400">
+                          {shareCode}
+                        </code>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-gray-500 dark:text-gray-500">
+                      Use this code on your other devices to sync your time tracking data.
+                    </p>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={syncExistingCode}
+                        variant="outline"
+                        className="flex-1 flex items-center gap-2"
+                        disabled={isLoading}
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        Sync Data
+                      </Button>
+                      <Button
+                        onClick={handleSwitchCode}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                      >
+                        Switch Code
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Generate a sync code to access your data on other devices.
+                  </p>
+                  <Button
+                    onClick={generateNewCode}
+                    className="flex items-center gap-2 w-full"
+                    disabled={isLoading}
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Generate Sync Code
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+
+          {activeTab === 'import' && (
+            <>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Enter your sync code from another device to access your data here.
+              </p>
+              <div className="space-y-3">
+                <Input
+                  placeholder="Enter sync code (e.g. blue-cat-7)"
+                  value={importCode}
+                  onChange={(e) => setImportCode(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && fetchSharedData()}
+                  className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
+                />
+                <Button
+                  onClick={fetchSharedData}
+                  variant="outline"
+                  className="w-full flex items-center gap-2"
+                  disabled={isLoading || !importCode.trim()}
+                >
+                  <Upload className="w-4 h-4" />
+                  {isLoading ? 'Fetching...' : 'Fetch & Download'}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Messages */}
         {error && (
-          <p className="text-sm text-red-500">{error}</p>
+          <p className="text-sm text-red-500 text-center">{error}</p>
+        )}
+        {successMessage && (
+          <p className="text-sm text-green-600 dark:text-green-400 text-center">{successMessage}</p>
         )}
       </div>
     </DialogContent>
