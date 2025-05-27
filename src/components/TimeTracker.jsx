@@ -416,12 +416,12 @@ const TimeTracker = () => {
                 variant="ghost"
                 size="sm"
                 onClick={clearLogs}
-                className={cn(
-                  "p-2 bg-transparent",
-                  isDarkMode 
-                    ? "text-gray-300 hover:text-red-400 hover:bg-gray-700 border-transparent" 
-                    : "text-gray-600 hover:text-red-600 hover:bg-gray-100 border-transparent"
-                )}
+className={cn(
+  "p-2 bg-transparent focus:outline-none focus:ring-0",
+  isDarkMode 
+    ? "text-gray-300 hover:text-red-400 hover:bg-gray-700 border-transparent" 
+    : "text-gray-600 hover:text-red-600 hover:bg-gray-100 border-transparent"
+)}
                 title="Clear all logs"
               >
                 <Trash2 className="w-4 h-4" />
@@ -430,12 +430,12 @@ const TimeTracker = () => {
                 variant="ghost"
                 size="sm"
                 onClick={toggleTheme}
-                className={cn(
-                  "p-2 bg-transparent",
-                  isDarkMode 
-                    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-700 border-transparent" 
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border-transparent"
-                )}
+className={cn(
+  "p-2 bg-transparent focus:outline-none focus:ring-0",
+  isDarkMode 
+    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-700 border-transparent" 
+    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border-transparent"
+)}
               >
                 {isDarkMode ? (
                   <Sun className="w-4 h-4" />
@@ -448,18 +448,55 @@ const TimeTracker = () => {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    className={cn(
-                      "flex items-center gap-1 text-xs",
-                      isDarkMode 
-                        ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
-                    )}
+className={cn(
+  "flex items-center gap-1 text-xs focus:outline-none focus:ring-0",
+  isDarkMode 
+    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
+    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
+)}
                   >
                     <Download className="w-3 h-3" />
                     Export
                   </Button>
                 </DialogTrigger>
-                <ExportDialog logs={logs} />
+                <ExportDialog 
+  logs={logs} 
+  onImportLogs={(importedLogs) => {
+    // Merge imported logs with existing logs
+    const mergedLogs = [...logs];
+    
+    importedLogs.forEach(importedLog => {
+      // Check if this log already exists (by timestamp)
+      const exists = mergedLogs.some(log => log.timestamp === importedLog.timestamp);
+      if (!exists) {
+        mergedLogs.push(importedLog);
+      }
+    });
+    
+    // Sort by timestamp
+    mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
+    
+    // Update state
+    setLogs(mergedLogs);
+    
+    // Check if there's an active check-in in the imported data
+    const lastLog = mergedLogs[mergedLogs.length - 1];
+    if (lastLog && lastLog.type === 'Check In' && !isCheckedIn) {
+      // Resume the check-in state
+      const checkInTime = new Date(lastLog.timestamp);
+      setIsCheckedIn(true);
+      setCheckInTime(checkInTime);
+      
+      // Start the timer
+      const interval = setInterval(() => {
+        const currentTime = new Date();
+        const timeDiff = currentTime - checkInTime;
+        setElapsedTime(formatElapsedTime(timeDiff));
+      }, 1000);
+      setTimerInterval(interval);
+    }
+  }}
+/>
               </Dialog>
             </div>
           </CardTitle>
@@ -479,18 +516,18 @@ const TimeTracker = () => {
               isDarkMode ? "text-gray-100" : "text-gray-900"
             )}>{isCheckedIn ? elapsedTime : '00:00:00'}</div>
             <Button 
-              className={cn(
-                "w-48 h-12 transition-all duration-200 text-lg",
-                isCheckedIn 
-                  ? cn(
-                      "bg-red-500 hover:bg-red-600",
-                      isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
-                    )
-                  : cn(
-                      "bg-green-500 hover:bg-green-600",
-                      isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
-                    )
-              )}
+className={cn(
+  "w-48 h-12 transition-all duration-200 text-lg focus:outline-none focus:ring-0",
+  isCheckedIn 
+    ? cn(
+        "bg-red-500 hover:bg-red-600",
+        isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
+      )
+    : cn(
+        "bg-green-500 hover:bg-green-600",
+        isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
+      )
+)}
               onClick={isCheckedIn ? handleCheckOut : handleCheckIn}
             >
               {isCheckedIn ? 'Check Out' : 'Check In'}
@@ -561,12 +598,12 @@ const TimeTracker = () => {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleSaveEdit(log)}
-                                className={cn(
-                                  "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
-                                  isDarkMode
-                                    ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
-                                    : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
-                                )}
+className={cn(
+  "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+  isDarkMode
+    ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
+    : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
+)}
                               >
                                 Save
                               </Button>
@@ -574,12 +611,12 @@ const TimeTracker = () => {
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleCancelEdit}
-                                className={cn(
-                                  "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80",
-                                  isDarkMode
-                                    ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
-                                    : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
-                                )}
+className={cn(
+  "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+  isDarkMode
+    ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
+    : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
+)}
                               >
                                 Cancel
                               </Button>
@@ -591,12 +628,12 @@ const TimeTracker = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleStartEdit(log)}
-                              className={cn(
-                                "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80",
-                                isDarkMode
-                                  ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
-                                  : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
-                              )}
+className={cn(
+  "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+  isDarkMode
+    ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
+    : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
+)}
                               tabIndex={-1}
                             >
                               Edit
@@ -622,14 +659,14 @@ const TimeTracker = () => {
   variant="ghost"
   size="sm"
   onClick={() => handleRemoveLog(log)}
-  className={cn(
-    "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
-    "flex items-center justify-center text-base leading-none",
-    "border shadow-sm",
-    isDarkMode
-      ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
-      : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
-  )}
+className={cn(
+  "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
+  "flex items-center justify-center text-base leading-none",
+  "border shadow-sm focus:outline-none focus:ring-0",
+  isDarkMode
+    ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
+    : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
+)}
   tabIndex={-1}
 >
   ×

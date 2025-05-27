@@ -7,13 +7,14 @@ import {
 } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Download, Share2, Upload, RefreshCw, ArrowRight } from 'lucide-react';
+import { ArrowDownToLine, Share2, Download, Upload, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev'; // Replace with your worker URL
 const STORAGE_KEY = 'timeTrackerShareCode';
+const IMPORT_CODE_KEY = 'timeTrackerImportCode';
 
-const ExportDialog = ({ logs, onClose }) => {
+const ExportDialog = ({ logs, onClose, onImportLogs }) => {
   const [shareCode, setShareCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +30,12 @@ const ExportDialog = ({ logs, onClose }) => {
       setShareCode(savedCode);
       setHasSavedCode(true);
       setActiveTab('share'); // Switch to share tab if user has a code
+    }
+    
+    // Load saved import code
+    const savedImportCode = localStorage.getItem(IMPORT_CODE_KEY);
+    if (savedImportCode) {
+      setImportCode(savedImportCode);
     }
   }, []);
 
@@ -185,19 +192,21 @@ const ExportDialog = ({ logs, onClose }) => {
       if (!response.ok) throw new Error('Failed to fetch shared data');
       
       const data = await response.json();
-      generateExcelFile(data.logs);
+      
+      // Import the logs into the local time tracker
+      if (onImportLogs && data.logs) {
+        onImportLogs(data.logs);
+      }
       
       // Save this code as the new active code
       setShareCode(importCode.trim());
       setHasSavedCode(true);
       localStorage.setItem(STORAGE_KEY, importCode.trim());
-      setSuccessMessage('Data downloaded successfully!');
       
-      // Switch to share tab
-      setTimeout(() => {
-        setActiveTab('share');
-        setImportCode('');
-      }, 1500);
+      // Save the import code in the textbox
+      localStorage.setItem(IMPORT_CODE_KEY, importCode.trim());
+      
+      setSuccessMessage('Data imported successfully! Switch to "Local Export" to download.');
     } catch (err) {
       setError('Failed to fetch shared data. Please check the code and try again.');
       console.error('Error:', err);
@@ -227,7 +236,7 @@ const ExportDialog = ({ logs, onClose }) => {
           <Button
             onClick={() => setActiveTab('local')}
             variant="ghost"
-            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-0 ${
               activeTab === 'local'
                 ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-600'
                 : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/50'
@@ -238,7 +247,7 @@ const ExportDialog = ({ logs, onClose }) => {
           <Button
             onClick={() => setActiveTab('share')}
             variant="ghost"
-            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-0 ${
               activeTab === 'share'
                 ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-600'
                 : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/50'
@@ -249,7 +258,7 @@ const ExportDialog = ({ logs, onClose }) => {
           <Button
             onClick={() => setActiveTab('import')}
             variant="ghost"
-            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 h-9 px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-0 ${
               activeTab === 'import'
                 ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm hover:bg-white dark:hover:bg-gray-600'
                 : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/50'
@@ -271,7 +280,7 @@ const ExportDialog = ({ logs, onClose }) => {
                 className="flex items-center gap-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
                 variant="outline"
               >
-                <Download className="w-4 h-4" />
+                <ArrowDownToLine className="w-4 h-4" />
                 Download Excel File
               </Button>
             </>
@@ -304,7 +313,7 @@ const ExportDialog = ({ logs, onClose }) => {
                         className="flex-1 flex items-center gap-2"
                         disabled={isLoading}
                       >
-                        <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        <Upload className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                         Sync Data
                       </Button>
                       <Button
@@ -345,7 +354,11 @@ const ExportDialog = ({ logs, onClose }) => {
                 <Input
                   placeholder="Enter sync code (e.g. blue-cat-7)"
                   value={importCode}
-                  onChange={(e) => setImportCode(e.target.value)}
+                  onChange={(e) => {
+                    setImportCode(e.target.value);
+                    // Save to localStorage as user types
+                    localStorage.setItem(IMPORT_CODE_KEY, e.target.value);
+                  }}
                   onKeyPress={(e) => e.key === 'Enter' && fetchSharedData()}
                   className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
                 />
@@ -355,8 +368,8 @@ const ExportDialog = ({ logs, onClose }) => {
                   className="w-full flex items-center gap-2"
                   disabled={isLoading || !importCode.trim()}
                 >
-                  <Upload className="w-4 h-4" />
-                  {isLoading ? 'Fetching...' : 'Fetch & Download'}
+                  <Download className="w-4 h-4" />
+                  {isLoading ? 'Fetching...' : 'Import Data'}
                 </Button>
               </div>
             </>
