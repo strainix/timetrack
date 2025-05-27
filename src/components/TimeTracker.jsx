@@ -12,17 +12,28 @@ import ExportDialog from './ExportDialog';
 import CreditCardBadge from './CreditCardBadge';
 
 const TimeTracker = () => {
-  const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
-  const [checkInTime, setCheckInTime] = useState(null);
   const [logs, setLogs] = useState([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
   const [editedDate, setEditedDate] = useState('');
+  const [editedType, setEditedType] = useState('');
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
-  const [timerInterval, setTimerInterval] = useState(null);
+
+  // Derive check-in state from logs
+  const getCheckInState = () => {
+    if (logs.length === 0) return { isCheckedIn: false, checkInTime: null };
+    
+    const lastLog = logs[logs.length - 1];
+    if (lastLog.type === 'Check In') {
+      return { isCheckedIn: true, checkInTime: new Date(lastLog.timestamp) };
+    }
+    return { isCheckedIn: false, checkInTime: null };
+  };
+
+  const { isCheckedIn, checkInTime } = getCheckInState();
 
   // Helper function for consistent time formatting
   const formatTime = (date) => {
@@ -58,31 +69,6 @@ const TimeTracker = () => {
     if (savedLogs) {
       setLogs(JSON.parse(savedLogs));
     }
-    
-    // Load check-in state
-    const savedCheckInState = localStorage.getItem('timeTrackerCheckIn');
-    if (savedCheckInState) {
-      const { isCheckedIn: savedIsCheckedIn, checkInTime: savedCheckInTime } = JSON.parse(savedCheckInState);
-      setIsCheckedIn(savedIsCheckedIn);
-      
-      // If there was an active check-in, restore the timer
-      if (savedIsCheckedIn && savedCheckInTime) {
-        const checkInDate = new Date(savedCheckInTime);
-        setCheckInTime(checkInDate);
-        
-        // Start the timer with the saved check-in time
-        const interval = setInterval(() => {
-          const currentTime = new Date();
-          const timeDiff = currentTime - checkInDate;
-          setElapsedTime(formatElapsedTime(timeDiff));
-        }, 1000);
-        setTimerInterval(interval);
-        
-        // Calculate and set initial elapsed time
-        const initialTimeDiff = new Date() - checkInDate;
-        setElapsedTime(formatElapsedTime(initialTimeDiff));
-      }
-    }
   
     // Load theme preference
     const savedTheme = localStorage.getItem('timeTrackerTheme');
@@ -94,12 +80,7 @@ const TimeTracker = () => {
   useEffect(() => {
     // Save logs
     localStorage.setItem('timeTrackerLogs', JSON.stringify(logs));
-    // Save check-in state
-    localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-      isCheckedIn,
-      checkInTime: checkInTime ? checkInTime.toISOString() : null
-    }));
-  }, [logs, isCheckedIn, checkInTime]);
+  }, [logs]);
 
   // Save theme preference
   useEffect(() => {
@@ -112,13 +93,31 @@ const TimeTracker = () => {
     }
   }, [isDarkMode]);
 
+  // Update timer based on check-in state
   useEffect(() => {
+    let interval;
+    
+    if (isCheckedIn && checkInTime) {
+      // Update immediately
+      const initialDiff = Date.now() - checkInTime.getTime();
+      setElapsedTime(formatElapsedTime(initialDiff));
+      
+      // Then update every second
+      interval = setInterval(() => {
+        const currentTime = new Date();
+        const timeDiff = currentTime - checkInTime;
+        setElapsedTime(formatElapsedTime(timeDiff));
+      }, 1000);
+    } else {
+      setElapsedTime('00:00:00');
+    }
+    
     return () => {
-      if (timerInterval) {
-        clearInterval(timerInterval);
+      if (interval) {
+        clearInterval(interval);
       }
     };
-  }, [timerInterval]);
+  }, [isCheckedIn, checkInTime]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -136,68 +135,30 @@ const TimeTracker = () => {
 
   const handleCheckIn = () => {
     const now = new Date();
-    setCheckInTime(now);
-    setIsCheckedIn(true);
     setLogs(prev => [...prev, {
       type: 'Check In',
       date: now.toLocaleDateString(),
       time: formatTime(now),
       timestamp: now.getTime()
     }]);
-    
-    // Store check-in state in localStorage
-    localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-      isCheckedIn: true,
-      checkInTime: now.toISOString()
-    }));
-    
-    // Start the timer
-    const interval = setInterval(() => {
-      const currentTime = new Date();
-      const timeDiff = currentTime - now;
-      setElapsedTime(formatElapsedTime(timeDiff));
-    }, 1000);
-    setTimerInterval(interval);
   };
 
   const handleCheckOut = () => {
-    const now = new Date();
-  
-    // Get the most recent check-in from logs
-    const mostRecentCheckIn = [...logs]
-      .reverse()
-      .find(log => log.type === 'Check In');
-  
-    if (!mostRecentCheckIn) {
-      console.error('No check-in found');
+    if (!isCheckedIn || !checkInTime) {
+      console.error('No active check-in found');
       return;
     }
-  
-    const checkOutTime = now.getTime();
-    const duration = calculateDuration(mostRecentCheckIn.timestamp, checkOutTime);
+
+    const now = new Date();
+    const duration = calculateDuration(checkInTime.getTime(), now.getTime());
   
     setLogs(prev => [...prev, {
       type: 'Check Out',
       date: now.toLocaleDateString(),
       time: formatTime(now),
-      timestamp: checkOutTime,
+      timestamp: now.getTime(),
       duration
     }]);
-  
-    // Clear states
-    setIsCheckedIn(false);
-    if (timerInterval) {
-      clearInterval(timerInterval);
-    }
-    setTimerInterval(null);
-    setCheckInTime(null);
-    setElapsedTime('00:00:00');
-  
-    // Clear localStorage
-    localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-      isCheckedIn: false,
-      checkInTime: null
-    }));
   };
 
   const handleRemoveLog = (logToRemove) => {
@@ -230,51 +191,8 @@ const TimeTracker = () => {
         return log;
       });
       
-      // Save to localStorage
-      localStorage.setItem('timeTrackerLogs', JSON.stringify(recalculatedLogs));
       return recalculatedLogs;
     });
-  
-    // If we're removing the active check-in, reset the timer
-    if (logToRemove.type === 'Check In' && 
-        logToRemove.timestamp === checkInTime?.getTime()) {
-      setIsCheckedIn(false);
-      setCheckInTime(null);
-      if (timerInterval) {
-        clearInterval(timerInterval);
-      }
-      setTimerInterval(null);
-      setElapsedTime('00:00:00');
-      localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-        isCheckedIn: false,
-        checkInTime: null
-      }));
-    } else {
-      // Check if we need to restore a check-in state
-      const remainingLogs = logs.filter(log => log.timestamp !== logToRemove.timestamp);
-      const lastLog = remainingLogs[remainingLogs.length - 1];
-      
-      if (lastLog && lastLog.type === 'Check In' && !isCheckedIn) {
-        // Restore the check-in state
-        const checkInTime = new Date(lastLog.timestamp);
-        setIsCheckedIn(true);
-        setCheckInTime(checkInTime);
-        
-        // Start the timer
-        const interval = setInterval(() => {
-          const currentTime = new Date();
-          const timeDiff = currentTime - checkInTime;
-          setElapsedTime(formatElapsedTime(timeDiff));
-        }, 1000);
-        setTimerInterval(interval);
-        
-        // Store check-in state
-        localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-          isCheckedIn: true,
-          checkInTime: checkInTime.toISOString()
-        }));
-      }
-    }
   };
 
   const calculateDuration = (start, end) => {
@@ -288,6 +206,7 @@ const TimeTracker = () => {
     setEditingLogId(log.timestamp);
     setEditedTime(log.time);
     setEditedDate(formatDateForInput(log.timestamp));
+    setEditedType(log.type);
   };
 
   const handleTimeChange = (e) => {
@@ -296,6 +215,10 @@ const TimeTracker = () => {
 
   const handleDateChange = (e) => {
     setEditedDate(e.target.value);
+  };
+
+  const handleTypeChange = (e) => {
+    setEditedType(e.target.value);
   };
 
   const handleSaveEdit = (logToEdit) => {
@@ -318,16 +241,12 @@ const TimeTracker = () => {
     const newDate = new Date(year, month - 1, day, hours, minutes, seconds);
     const newTimestamp = newDate.getTime();
   
-    // Find if this is the active check-in before updating logs
-    const isEditingActiveCheckIn = isCheckedIn && 
-      logToEdit.type === 'Check In' && 
-      logToEdit.timestamp === checkInTime?.getTime();
-  
     // Update logs
     const updatedLogs = logs.map(log => {
       if (log.timestamp === logToEdit.timestamp) {
         return {
           ...log,
+          type: editedType || log.type,
           date: newDate.toLocaleDateString(),
           time: editedTime,
           timestamp: newTimestamp
@@ -338,36 +257,6 @@ const TimeTracker = () => {
   
     // Sort logs by timestamp
     const sortedLogs = updatedLogs.sort((a, b) => a.timestamp - b.timestamp);
-  
-    // If we were editing the active check-in, update the timer
-    if (isEditingActiveCheckIn) {
-      // Clear existing timer
-      if (timerInterval) {
-        clearInterval(timerInterval);
-      }
-  
-      // Update check-in time
-      setCheckInTime(newDate);
-  
-      // Store in localStorage
-      localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-        isCheckedIn: true,
-        checkInTime: newDate.toISOString()
-      }));
-  
-      // Set initial elapsed time
-      const initialDiff = Date.now() - newDate.getTime();
-      setElapsedTime(formatElapsedTime(initialDiff));
-  
-      // Start new timer
-      const newInterval = setInterval(() => {
-        const now = new Date();
-        const timeDiff = now - newDate;
-        setElapsedTime(formatElapsedTime(timeDiff));
-      }, 1000);
-  
-      setTimerInterval(newInterval);
-    }
   
     // Update all logs with corrected durations
     const logsWithDurations = sortedLogs.map((log, index) => {
@@ -384,20 +273,25 @@ const TimeTracker = () => {
           const { duration, ...logWithoutDuration } = log;
           return logWithoutDuration;
         }
+      } else {
+        // Remove duration from check-ins if they have one
+        const { duration, ...logWithoutDuration } = log;
+        return logWithoutDuration;
       }
-      return log;
     });
   
     setLogs(logsWithDurations);
     setEditingLogId(null);
     setEditedTime('');
     setEditedDate('');
+    setEditedType('');
   };
 
   const handleCancelEdit = () => {
     setEditingLogId(null);
     setEditedTime('');
     setEditedDate('');
+    setEditedType('');
   };
 
   const toggleTheme = () => {
@@ -407,15 +301,7 @@ const TimeTracker = () => {
   const clearLogs = () => {
     if (window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
       setLogs([]);
-      setIsCheckedIn(false);
-      setCheckInTime(null);
-      setElapsedTime('00:00:00');
-      if (timerInterval) {
-        clearInterval(timerInterval);
-      }
-      setTimerInterval(null);
       localStorage.removeItem('timeTrackerLogs');
-      localStorage.removeItem('timeTrackerCheckIn');
     }
   };
 
@@ -505,25 +391,26 @@ const TimeTracker = () => {
                     // Sort by timestamp
                     mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
                     
-                    // Update state
-                    setLogs(mergedLogs);
+                    // Recalculate durations
+                    const logsWithDurations = mergedLogs.map((log, index) => {
+                      if (log.type === 'Check Out') {
+                        const previousCheckIn = [...mergedLogs].slice(0, index)
+                          .reverse()
+                          .find(l => l.type === 'Check In');
+                        
+                        if (previousCheckIn) {
+                          const duration = calculateDuration(previousCheckIn.timestamp, log.timestamp);
+                          return { ...log, duration };
+                        } else {
+                          const { duration, ...logWithoutDuration } = log;
+                          return logWithoutDuration;
+                        }
+                      }
+                      return log;
+                    });
                     
-                    // Check if there's an active check-in in the imported data
-                    const lastLog = mergedLogs[mergedLogs.length - 1];
-                    if (lastLog && lastLog.type === 'Check In' && !isCheckedIn) {
-                      // Resume the check-in state
-                      const checkInTime = new Date(lastLog.timestamp);
-                      setIsCheckedIn(true);
-                      setCheckInTime(checkInTime);
-                      
-                      // Start the timer
-                      const interval = setInterval(() => {
-                        const currentTime = new Date();
-                        const timeDiff = currentTime - checkInTime;
-                        setElapsedTime(formatElapsedTime(timeDiff));
-                      }, 1000);
-                      setTimerInterval(interval);
-                    }
+                    // Update state
+                    setLogs(logsWithDurations);
                   }}
                 />
               </Dialog>
@@ -582,14 +469,34 @@ const TimeTracker = () => {
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className={cn(
-                        "font-medium",
-                        log.type === 'Check In' 
-                          ? isDarkMode ? 'text-green-400' : 'text-green-600'
-                          : isDarkMode ? 'text-red-400' : 'text-red-600'
-                      )}>
-                        {log.type}
-                      </span>
+                      {editingLogId === log.timestamp ? (
+                        <select
+                          value={editedType || log.type}
+                          onChange={handleTypeChange}
+                          className={cn(
+                            "font-medium px-2 py-1 rounded border transition-colors",
+                            editedType === 'Check In'
+                              ? isDarkMode 
+                                ? "bg-green-900/30 border-green-800 text-green-400" 
+                                : "bg-green-50 border-green-200 text-green-600"
+                              : isDarkMode 
+                                ? "bg-red-900/30 border-red-800 text-red-400" 
+                                : "bg-red-50 border-red-200 text-red-600"
+                          )}
+                        >
+                          <option value="Check In">Check In</option>
+                          <option value="Check Out">Check Out</option>
+                        </select>
+                      ) : (
+                        <span className={cn(
+                          "font-medium",
+                          log.type === 'Check In' 
+                            ? isDarkMode ? 'text-green-400' : 'text-green-600'
+                            : isDarkMode ? 'text-red-400' : 'text-red-600'
+                        )}>
+                          {log.type}
+                        </span>
+                      )}
                       {editingLogId === log.timestamp ? (
                         <div className="mt-1">
                           <input
@@ -597,10 +504,10 @@ const TimeTracker = () => {
                             value={editedDate}
                             onChange={handleDateChange}
                             className={cn(
-                              "w-32 px-1 py-0.5 text-xs rounded border",
+                              "w-32 px-2 py-1 text-xs rounded border transition-colors",
                               isDarkMode 
-                                ? "bg-gray-700 border-gray-600 text-gray-100" 
-                                : "bg-white border-gray-300 text-gray-900"
+                                ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
+                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
                             )}
                           />
                         </div>
@@ -613,29 +520,29 @@ const TimeTracker = () => {
                     </div>
                     <div className="text-right">
                       {editingLogId === log.timestamp ? (
-                        <div className="flex items-center gap-2">
+                        <div className="space-y-2">
                           <input
                             type="text"
                             value={editedTime}
                             onChange={handleTimeChange}
                             className={cn(
-                              "w-24 px-1 py-0.5 font-mono text-sm rounded border",
+                              "w-24 px-2 py-1 font-mono text-sm rounded border transition-colors",
                               isDarkMode 
-                                ? "bg-gray-700 border-gray-600 text-gray-100" 
-                                : "bg-white border-gray-300 text-gray-900"
+                                ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
+                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
                             )}
                             placeholder="HH:mm:ss"
                           />
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 justify-end">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleSaveEdit(log)}
                               className={cn(
-                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                                "h-7 px-3 text-xs font-medium transition-all",
                                 isDarkMode
-                                  ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
-                                  : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
+                                  ? "bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-800"
+                                  : "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
                               )}
                             >
                               Save
@@ -645,10 +552,10 @@ const TimeTracker = () => {
                               size="sm"
                               onClick={handleCancelEdit}
                               className={cn(
-                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                                "h-7 px-3 text-xs font-medium transition-all",
                                 isDarkMode
-                                  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
-                                  : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
+                                  ? "bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600"
+                                  : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-300"
                               )}
                             >
                               Cancel
@@ -677,7 +584,7 @@ const TimeTracker = () => {
                           )}>{log.time}</div>
                         </div>
                       )}
-                      {log.duration && (
+                      {log.duration && !editingLogId && (
                         <div className={cn(
                           "text-xs",
                           isDarkMode ? "text-gray-400" : "text-gray-500"
