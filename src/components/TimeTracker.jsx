@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { Clock, Download, Trash2, Moon, Sun } from 'lucide-react';
+import { Clock, Download, Trash2, Moon, Sun, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
 import {
   Dialog,
   DialogTrigger,
-} from '../components/ui/dialog';
+} from './ui/dialog';
 import ExportDialog from './ExportDialog';
 import CreditCardBadge from './CreditCardBadge';
 
@@ -20,6 +20,7 @@ const TimeTracker = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
+  const [editedDate, setEditedDate] = useState('');
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [timerInterval, setTimerInterval] = useState(null);
 
@@ -40,6 +41,15 @@ const TimeTracker = () => {
     const seconds = totalSeconds % 60;
     
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
+
+  // Format date for input field (YYYY-MM-DD)
+  const formatDateForInput = (timestamp) => {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   useEffect(() => {
@@ -192,71 +202,42 @@ const TimeTracker = () => {
 
   const handleRemoveLog = (logToRemove) => {
     // Ask for confirmation
-    if (!window.confirm('Are you sure you want to remove this entry?')) {
+    if (!window.confirm('Are you sure you want to remove this entry? This may unpair check-in/check-out entries.')) {
       return;
-    }
-  
-    // If this is a check-in, see if it has a paired check-out
-    if (logToRemove.type === 'Check In') {
-      const hasCheckOut = logs.some(l => 
-        l.type === 'Check Out' && 
-        l.timestamp > logToRemove.timestamp &&
-        !logs.some(other => 
-          other.type === 'Check In' && 
-          other.timestamp > logToRemove.timestamp && 
-          other.timestamp < l.timestamp
-        )
-      );
-      if (hasCheckOut) {
-        alert("Please remove the check-out entry first.");
-        return;
-      }
     }
   
     // Update logs state
     setLogs(prevLogs => {
       const newLogs = prevLogs.filter(log => log.timestamp !== logToRemove.timestamp);
+      
+      // Recalculate durations for all check-outs
+      const recalculatedLogs = newLogs.map((log, index) => {
+        if (log.type === 'Check Out') {
+          // Find the most recent check-in before this check-out
+          const previousCheckIn = [...newLogs].slice(0, index)
+            .reverse()
+            .find(l => l.type === 'Check In');
+          
+          if (previousCheckIn) {
+            const duration = calculateDuration(previousCheckIn.timestamp, log.timestamp);
+            return { ...log, duration };
+          } else {
+            // No matching check-in, remove duration
+            const { duration, ...logWithoutDuration } = log;
+            return logWithoutDuration;
+          }
+        }
+        return log;
+      });
+      
       // Save to localStorage
-      localStorage.setItem('timeTrackerLogs', JSON.stringify(newLogs));
-      return newLogs;
+      localStorage.setItem('timeTrackerLogs', JSON.stringify(recalculatedLogs));
+      return recalculatedLogs;
     });
   
-    // Handle removal of a check-out entry
-    if (logToRemove.type === 'Check Out') {
-      // Find the corresponding check-in
-      const matchingCheckIn = logs.find(l => 
-        l.type === 'Check In' && 
-        l.timestamp < logToRemove.timestamp &&
-        !logs.some(other => 
-          other.type === 'Check Out' && 
-          other.timestamp > l.timestamp && 
-          other.timestamp < logToRemove.timestamp
-        )
-      );
-  
-      // If we found the matching check-in, restart the timer
-      if (matchingCheckIn) {
-        const checkInTime = new Date(matchingCheckIn.timestamp);
-        setCheckInTime(checkInTime);
-        setIsCheckedIn(true);
-  
-        // Start the timer
-        const interval = setInterval(() => {
-          const currentTime = new Date();
-          const timeDiff = currentTime - checkInTime;
-          setElapsedTime(formatElapsedTime(timeDiff));
-        }, 1000);
-        setTimerInterval(interval);
-  
-        // Store check-in state
-        localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
-          isCheckedIn: true,
-          checkInTime: checkInTime.toISOString()
-        }));
-      }
-    } else if (logToRemove.type === 'Check In' && 
+    // If we're removing the active check-in, reset the timer
+    if (logToRemove.type === 'Check In' && 
         logToRemove.timestamp === checkInTime?.getTime()) {
-      // Reset check-in state if removing active check-in
       setIsCheckedIn(false);
       setCheckInTime(null);
       if (timerInterval) {
@@ -268,6 +249,31 @@ const TimeTracker = () => {
         isCheckedIn: false,
         checkInTime: null
       }));
+    } else {
+      // Check if we need to restore a check-in state
+      const remainingLogs = logs.filter(log => log.timestamp !== logToRemove.timestamp);
+      const lastLog = remainingLogs[remainingLogs.length - 1];
+      
+      if (lastLog && lastLog.type === 'Check In' && !isCheckedIn) {
+        // Restore the check-in state
+        const checkInTime = new Date(lastLog.timestamp);
+        setIsCheckedIn(true);
+        setCheckInTime(checkInTime);
+        
+        // Start the timer
+        const interval = setInterval(() => {
+          const currentTime = new Date();
+          const timeDiff = currentTime - checkInTime;
+          setElapsedTime(formatElapsedTime(timeDiff));
+        }, 1000);
+        setTimerInterval(interval);
+        
+        // Store check-in state
+        localStorage.setItem('timeTrackerCheckIn', JSON.stringify({
+          isCheckedIn: true,
+          checkInTime: checkInTime.toISOString()
+        }));
+      }
     }
   };
 
@@ -281,10 +287,15 @@ const TimeTracker = () => {
   const handleStartEdit = (log) => {
     setEditingLogId(log.timestamp);
     setEditedTime(log.time);
+    setEditedDate(formatDateForInput(log.timestamp));
   };
 
   const handleTimeChange = (e) => {
     setEditedTime(e.target.value);
+  };
+
+  const handleDateChange = (e) => {
+    setEditedDate(e.target.value);
   };
 
   const handleSaveEdit = (logToEdit) => {
@@ -294,11 +305,17 @@ const TimeTracker = () => {
       alert('Please enter a valid time in 24-hour format (HH:mm:ss)');
       return;
     }
+    
+    // Validate date
+    if (!editedDate) {
+      alert('Please enter a valid date');
+      return;
+    }
   
     // Create the new date for the edited time
+    const [year, month, day] = editedDate.split('-').map(Number);
     const [hours, minutes, seconds] = editedTime.split(':').map(Number);
-    const newDate = new Date(logToEdit.timestamp);
-    newDate.setHours(hours, minutes, seconds);
+    const newDate = new Date(year, month - 1, day, hours, minutes, seconds);
     const newTimestamp = newDate.getTime();
   
     // Find if this is the active check-in before updating logs
@@ -311,6 +328,7 @@ const TimeTracker = () => {
       if (log.timestamp === logToEdit.timestamp) {
         return {
           ...log,
+          date: newDate.toLocaleDateString(),
           time: editedTime,
           timestamp: newTimestamp
         };
@@ -361,6 +379,10 @@ const TimeTracker = () => {
         if (previousCheckIn) {
           const duration = calculateDuration(previousCheckIn.timestamp, log.timestamp);
           return { ...log, duration };
+        } else {
+          // Remove duration if no matching check-in
+          const { duration, ...logWithoutDuration } = log;
+          return logWithoutDuration;
         }
       }
       return log;
@@ -369,11 +391,13 @@ const TimeTracker = () => {
     setLogs(logsWithDurations);
     setEditingLogId(null);
     setEditedTime('');
+    setEditedDate('');
   };
 
   const handleCancelEdit = () => {
     setEditingLogId(null);
     setEditedTime('');
+    setEditedDate('');
   };
 
   const toggleTheme = () => {
@@ -385,6 +409,11 @@ const TimeTracker = () => {
       setLogs([]);
       setIsCheckedIn(false);
       setCheckInTime(null);
+      setElapsedTime('00:00:00');
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+      setTimerInterval(null);
       localStorage.removeItem('timeTrackerLogs');
       localStorage.removeItem('timeTrackerCheckIn');
     }
@@ -412,30 +441,30 @@ const TimeTracker = () => {
               )}>Time Tracker</span>
             </div>
             <div className="flex gap-2 items-center">
-<Button
+              <Button
                 variant="ghost"
                 size="sm"
                 onClick={clearLogs}
-className={cn(
-  "p-2 bg-transparent focus:outline-none focus:ring-0",
-  isDarkMode 
-    ? "text-gray-300 hover:text-red-400 hover:bg-gray-700 border-transparent" 
-    : "text-gray-600 hover:text-red-600 hover:bg-gray-100 border-transparent"
-)}
+                className={cn(
+                  "p-2 bg-transparent focus:outline-none focus:ring-0",
+                  isDarkMode 
+                    ? "text-gray-300 hover:text-red-400 hover:bg-gray-700 border-transparent" 
+                    : "text-gray-600 hover:text-red-600 hover:bg-gray-100 border-transparent"
+                )}
                 title="Clear all logs"
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
-            <Button
+              <Button
                 variant="ghost"
                 size="sm"
                 onClick={toggleTheme}
-className={cn(
-  "p-2 bg-transparent focus:outline-none focus:ring-0",
-  isDarkMode 
-    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-700 border-transparent" 
-    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border-transparent"
-)}
+                className={cn(
+                  "p-2 bg-transparent focus:outline-none focus:ring-0",
+                  isDarkMode 
+                    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-700 border-transparent" 
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border-transparent"
+                )}
               >
                 {isDarkMode ? (
                   <Sun className="w-4 h-4" />
@@ -448,55 +477,55 @@ className={cn(
                   <Button 
                     variant="outline" 
                     size="sm"
-className={cn(
-  "flex items-center gap-1 text-xs focus:outline-none focus:ring-0",
-  isDarkMode 
-    ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
-    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
-)}
+                    className={cn(
+                      "flex items-center gap-1 text-xs focus:outline-none focus:ring-0",
+                      isDarkMode 
+                        ? "border-gray-600 text-gray-300 hover:text-gray-100 hover:bg-gray-700 bg-transparent" 
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 bg-transparent"
+                    )}
                   >
                     <Download className="w-3 h-3" />
                     Export
                   </Button>
                 </DialogTrigger>
                 <ExportDialog 
-  logs={logs} 
-  onImportLogs={(importedLogs) => {
-    // Merge imported logs with existing logs
-    const mergedLogs = [...logs];
-    
-    importedLogs.forEach(importedLog => {
-      // Check if this log already exists (by timestamp)
-      const exists = mergedLogs.some(log => log.timestamp === importedLog.timestamp);
-      if (!exists) {
-        mergedLogs.push(importedLog);
-      }
-    });
-    
-    // Sort by timestamp
-    mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
-    
-    // Update state
-    setLogs(mergedLogs);
-    
-    // Check if there's an active check-in in the imported data
-    const lastLog = mergedLogs[mergedLogs.length - 1];
-    if (lastLog && lastLog.type === 'Check In' && !isCheckedIn) {
-      // Resume the check-in state
-      const checkInTime = new Date(lastLog.timestamp);
-      setIsCheckedIn(true);
-      setCheckInTime(checkInTime);
-      
-      // Start the timer
-      const interval = setInterval(() => {
-        const currentTime = new Date();
-        const timeDiff = currentTime - checkInTime;
-        setElapsedTime(formatElapsedTime(timeDiff));
-      }, 1000);
-      setTimerInterval(interval);
-    }
-  }}
-/>
+                  logs={logs} 
+                  onImportLogs={(importedLogs) => {
+                    // Merge imported logs with existing logs
+                    const mergedLogs = [...logs];
+                    
+                    importedLogs.forEach(importedLog => {
+                      // Check if this log already exists (by timestamp)
+                      const exists = mergedLogs.some(log => log.timestamp === importedLog.timestamp);
+                      if (!exists) {
+                        mergedLogs.push(importedLog);
+                      }
+                    });
+                    
+                    // Sort by timestamp
+                    mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
+                    
+                    // Update state
+                    setLogs(mergedLogs);
+                    
+                    // Check if there's an active check-in in the imported data
+                    const lastLog = mergedLogs[mergedLogs.length - 1];
+                    if (lastLog && lastLog.type === 'Check In' && !isCheckedIn) {
+                      // Resume the check-in state
+                      const checkInTime = new Date(lastLog.timestamp);
+                      setIsCheckedIn(true);
+                      setCheckInTime(checkInTime);
+                      
+                      // Start the timer
+                      const interval = setInterval(() => {
+                        const currentTime = new Date();
+                        const timeDiff = currentTime - checkInTime;
+                        setElapsedTime(formatElapsedTime(timeDiff));
+                      }, 1000);
+                      setTimerInterval(interval);
+                    }
+                  }}
+                />
               </Dialog>
             </div>
           </CardTitle>
@@ -516,18 +545,18 @@ className={cn(
               isDarkMode ? "text-gray-100" : "text-gray-900"
             )}>{isCheckedIn ? elapsedTime : '00:00:00'}</div>
             <Button 
-className={cn(
-  "w-48 h-12 transition-all duration-200 text-lg focus:outline-none focus:ring-0",
-  isCheckedIn 
-    ? cn(
-        "bg-red-500 hover:bg-red-600",
-        isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
-      )
-    : cn(
-        "bg-green-500 hover:bg-green-600",
-        isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
-      )
-)}
+              className={cn(
+                "w-48 h-12 transition-all duration-200 text-lg focus:outline-none focus:ring-0",
+                isCheckedIn 
+                  ? cn(
+                      "bg-red-500 hover:bg-red-600",
+                      isDarkMode ? "shadow-lg shadow-red-900/50" : "shadow-lg shadow-red-200"
+                    )
+                  : cn(
+                      "bg-green-500 hover:bg-green-600",
+                      isDarkMode ? "shadow-lg shadow-green-900/50" : "shadow-lg shadow-green-200"
+                    )
+              )}
               onClick={isCheckedIn ? handleCheckOut : handleCheckIn}
             >
               {isCheckedIn ? 'Check Out' : 'Check In'}
@@ -540,141 +569,142 @@ className={cn(
               isDarkMode ? "text-gray-300" : "text-gray-500"
             )}>Recent Activity</h3>
             <div className="max-h-64 overflow-y-auto px-1 pr-3 py-2 relative">
-              {logs.slice().reverse().map((log, index, reversedLogs) => {
-                // Check if this log is paired (for check-in entries)
-                const isPaired = log.type === 'Check In' && reversedLogs.some(l => 
-                  l.type === 'Check Out' && 
-                  l.timestamp > log.timestamp &&
-                  !reversedLogs.some(other => 
-                    other.type === 'Check In' && 
-                    other.timestamp > log.timestamp && 
-                    other.timestamp < l.timestamp
-                  )
-                );
-
-                return (
-                  <div 
-                    key={log.timestamp} 
-                    className={cn(
-                      "group relative",
-                      "p-2 rounded-lg text-sm mb-2",
-                      isDarkMode
-                        ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
-                        : log.type === 'Check In' ? 'bg-green-50' : 'bg-red-50'
-                    )}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className={cn(
-                          "font-medium",
-                          log.type === 'Check In' 
-                            ? isDarkMode ? 'text-green-400' : 'text-green-600'
-                            : isDarkMode ? 'text-red-400' : 'text-red-600'
-                        )}>
-                          {log.type}
-                        </span>
+              {logs.slice().reverse().map((log, index) => (
+                <div 
+                  key={log.timestamp} 
+                  className={cn(
+                    "group relative",
+                    "p-2 rounded-lg text-sm mb-2",
+                    isDarkMode
+                      ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
+                      : log.type === 'Check In' ? 'bg-green-50' : 'bg-red-50'
+                  )}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className={cn(
+                        "font-medium",
+                        log.type === 'Check In' 
+                          ? isDarkMode ? 'text-green-400' : 'text-green-600'
+                          : isDarkMode ? 'text-red-400' : 'text-red-600'
+                      )}>
+                        {log.type}
+                      </span>
+                      {editingLogId === log.timestamp ? (
+                        <div className="mt-1">
+                          <input
+                            type="date"
+                            value={editedDate}
+                            onChange={handleDateChange}
+                            className={cn(
+                              "w-32 px-1 py-0.5 text-xs rounded border",
+                              isDarkMode 
+                                ? "bg-gray-700 border-gray-600 text-gray-100" 
+                                : "bg-white border-gray-300 text-gray-900"
+                            )}
+                          />
+                        </div>
+                      ) : (
                         <div className={cn(
                           "text-xs",
                           isDarkMode ? "text-gray-400" : "text-gray-500"
                         )}>{log.date}</div>
-                      </div>
-                      <div className="text-right">
-                        {editingLogId === log.timestamp ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={editedTime}
-                              onChange={handleTimeChange}
-                              className={cn(
-                                "w-24 px-1 py-0.5 font-mono text-sm rounded border",
-                                isDarkMode 
-                                  ? "bg-gray-700 border-gray-600 text-gray-100" 
-                                  : "bg-white border-gray-300 text-gray-900"
-                              )}
-                              placeholder="HH:mm:ss"
-                            />
-                            <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleSaveEdit(log)}
-className={cn(
-  "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
-  isDarkMode
-    ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
-    : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
-)}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleCancelEdit}
-className={cn(
-  "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
-  isDarkMode
-    ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
-    : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
-)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
+                      )}
+                    </div>
+                    <div className="text-right">
+                      {editingLogId === log.timestamp ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editedTime}
+                            onChange={handleTimeChange}
+                            className={cn(
+                              "w-24 px-1 py-0.5 font-mono text-sm rounded border",
+                              isDarkMode 
+                                ? "bg-gray-700 border-gray-600 text-gray-100" 
+                                : "bg-white border-gray-300 text-gray-900"
+                            )}
+                            placeholder="HH:mm:ss"
+                          />
+                          <div className="flex gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleStartEdit(log)}
-className={cn(
-  "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
-  isDarkMode
-    ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
-    : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
-)}
-                              tabIndex={-1}
+                              onClick={() => handleSaveEdit(log)}
+                              className={cn(
+                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                                isDarkMode
+                                  ? "text-green-400 hover:text-green-300 hover:bg-gray-700"
+                                  : "text-green-600 hover:text-green-700 hover:bg-gray-100/60"
+                              )}
                             >
-                              Edit
+                              Save
                             </Button>
-                            <div className={cn(
-                              "font-mono",
-                              isDarkMode ? "text-gray-100" : "text-gray-900"
-                            )}>{log.time}</div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleCancelEdit}
+                              className={cn(
+                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                                isDarkMode
+                                  ? "text-gray-400 hover:text-gray-300 hover:bg-gray-700"
+                                  : "text-gray-600 hover:text-gray-700 hover:bg-gray-100/60"
+                              )}
+                            >
+                              Cancel
+                            </Button>
                           </div>
-                        )}
-                        {log.duration && (
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEdit(log)}
+                            className={cn(
+                              "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                              isDarkMode
+                                ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
+                                : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
+                            )}
+                            tabIndex={-1}
+                          >
+                            Edit
+                          </Button>
                           <div className={cn(
-                            "text-xs",
-                            isDarkMode ? "text-gray-400" : "text-gray-500"
-                          )}>{log.duration}</div>
-                        )}
-                      </div>
+                            "font-mono",
+                            isDarkMode ? "text-gray-100" : "text-gray-900"
+                          )}>{log.time}</div>
+                        </div>
+                      )}
+                      {log.duration && (
+                        <div className={cn(
+                          "text-xs",
+                          isDarkMode ? "text-gray-400" : "text-gray-500"
+                        )}>{log.duration}</div>
+                      )}
                     </div>
-
-                    {/* Only show remove button if it's a check-out or an unpaired check-in */}
-                    {(log.type === 'Check Out' || !isPaired) && (
-  <Button
-  variant="ghost"
-  size="sm"
-  onClick={() => handleRemoveLog(log)}
-className={cn(
-  "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
-  "flex items-center justify-center text-base leading-none",
-  "border shadow-sm focus:outline-none focus:ring-0",
-  isDarkMode
-    ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
-    : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
-)}
-  tabIndex={-1}
->
-  ×
-</Button>
-)}
                   </div>
-                );
-              })}
+
+                  {/* Remove button - now visible for all entries */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveLog(log)}
+                    className={cn(
+                      "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
+                      "flex items-center justify-center text-base leading-none",
+                      "border shadow-sm focus:outline-none focus:ring-0",
+                      isDarkMode
+                        ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
+                        : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
+                    )}
+                    tabIndex={-1}
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
             </div>
           </div>
         </CardContent>
