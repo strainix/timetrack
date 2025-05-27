@@ -412,6 +412,20 @@ const TimeTracker = () => {
               )}>Time Tracker</span>
             </div>
             <div className="flex gap-2 items-center">
+<Button
+                variant="ghost"
+                size="sm"
+                onClick={clearLogs}
+                className={cn(
+                  "p-2 bg-transparent",
+                  isDarkMode 
+                    ? "text-gray-300 hover:text-red-400 hover:bg-gray-700 border-transparent" 
+                    : "text-gray-600 hover:text-red-600 hover:bg-gray-100 border-transparent"
+                )}
+                title="Clear all logs"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
             <Button
                 variant="ghost"
                 size="sm"
