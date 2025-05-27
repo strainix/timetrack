@@ -10,8 +10,7 @@ import { Input } from '../components/ui/input';
 import { Download, Share2, Upload, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const JSONBIN_API_KEY = '$2a$10$nN4n9NgHVvxs2YOy7CsNN.c25VKe.27fHXH9od6O3XUwN9pwUFRoW'; // Replace with your API key
-const JSONBIN_API_URL = 'https://api.jsonbin.io/v3/b';
+const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev'; // Replace with your worker URL
 const STORAGE_KEY = 'timeTrackerShareCode';
 
 const ExportDialog = ({ logs, onClose }) => {
@@ -120,26 +119,23 @@ const ExportDialog = ({ logs, onClose }) => {
     setIsLoading(true);
     setError('');
     try {
-      // If we already have a code, update the existing bin
       if (hasSavedCode) {
-        const response = await fetch(`${JSONBIN_API_URL}/${shareCode}`, {
+        // Update existing data
+        const response = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'X-Master-Key': JSONBIN_API_KEY,
           },
           body: JSON.stringify({ logs }),
         });
         
         if (!response.ok) throw new Error('Failed to sync data');
       } else {
-        // Create new bin
-        const response = await fetch(JSONBIN_API_URL, {
+        // Create new entry with generated passphrase
+        const response = await fetch(`${WORKER_API_URL}/api/timesheet`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Master-Key': JSONBIN_API_KEY,
-            'X-Bin-Private': false,
           },
           body: JSON.stringify({ logs }),
         });
@@ -147,10 +143,9 @@ const ExportDialog = ({ logs, onClose }) => {
         if (!response.ok) throw new Error('Failed to generate share code');
         
         const data = await response.json();
-        const binId = data.metadata.id;
-        setShareCode(binId);
+        setShareCode(data.passphrase);
         setHasSavedCode(true);
-        localStorage.setItem(STORAGE_KEY, binId);
+        localStorage.setItem(STORAGE_KEY, data.passphrase);
       }
     } catch (err) {
       setError(hasSavedCode ? 'Failed to sync data. Please try again.' : 'Failed to generate share code. Please try again.');
@@ -169,16 +164,12 @@ const ExportDialog = ({ logs, onClose }) => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await fetch(`${JSONBIN_API_URL}/${shareCode}/latest`, {
-        headers: {
-          'X-Master-Key': JSONBIN_API_KEY,
-        },
-      });
+      const response = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`);
       
       if (!response.ok) throw new Error('Failed to fetch shared data');
       
       const data = await response.json();
-      generateExcelFile(data.record.logs);
+      generateExcelFile(data.logs);
       
       // Save the code if it's not already saved
       if (!hasSavedCode) {
@@ -211,7 +202,7 @@ const ExportDialog = ({ logs, onClose }) => {
         <div className="space-y-2">
           <div className="flex gap-2">
             <Input
-              placeholder="Share code"
+              placeholder="Share code (e.g. blue-cat-7)"
               value={shareCode}
               onChange={(e) => setShareCode(e.target.value)}
               className="flex-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
