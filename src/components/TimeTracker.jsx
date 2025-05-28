@@ -83,7 +83,7 @@ const TimeTracker = () => {
   }, [logs]);
 
   // Save theme preference
-  useEffect(() => {
+useEffect(() => {
     localStorage.setItem('timeTrackerTheme', JSON.stringify(isDarkMode));
     // Update document class for dark mode
     if (isDarkMode) {
@@ -91,7 +91,13 @@ const TimeTracker = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [isDarkMode]);
+    
+    // THIS IS THE NEW PART - Updates the theme-color meta tag
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]:not([media])');
+    if (themeColorMeta) {
+      themeColorMeta.content = isDarkMode ? '#1f2937' : '#ffffff';
+    }
+}, [isDarkMode]);
 
   // Update timer based on check-in state
   useEffect(() => {
