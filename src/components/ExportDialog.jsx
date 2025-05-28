@@ -286,7 +286,7 @@ const ExportDialog = ({ logs, onClose, onImportLogs }) => {
             </>
           )}
 
-          {activeTab === 'share' && (
+{activeTab === 'share' && (
             <>
               {hasSavedCode ? (
                 <>
@@ -323,6 +323,21 @@ const ExportDialog = ({ logs, onClose, onImportLogs }) => {
                         className="text-xs"
                       >
                         Switch Code
+                      </Button>
+                    </div>
+                    
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        Need a new sync code?
+                      </p>
+                      <Button
+                        onClick={generateNewCode}
+                        variant="outline"
+                        className="flex items-center gap-2 w-full"
+                        disabled={isLoading}
+                      >
+                        <Share2 className="w-4 h-4" />
+                        Generate New Sync Code
                       </Button>
                     </div>
                   </div>
