@@ -306,25 +306,15 @@ const ExportDialog = ({ logs, onClose, onImportLogs }) => {
                       Use this code on your other devices to sync your time tracking data.
                     </p>
 
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={syncExistingCode}
-                        variant="outline"
-                        className="flex-1 flex items-center gap-2"
-                        disabled={isLoading}
-                      >
-                        <Upload className="w-4 h-4" />
-                        {isLoading ? 'Syncing...' : 'Sync Data'}
-                      </Button>
-                      <Button
-                        onClick={handleSwitchCode}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        Switch Code
-                      </Button>
-                    </div>
+                    <Button
+                      onClick={syncExistingCode}
+                      variant="outline"
+                      className="w-full flex items-center gap-2"
+                      disabled={isLoading}
+                    >
+                      <Upload className="w-4 h-4" />
+                      {isLoading ? 'Syncing...' : 'Sync Data'}
+                    </Button>
                     
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
