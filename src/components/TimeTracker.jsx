@@ -19,6 +19,7 @@ const TimeTracker = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [logs, setLogs] = useState([]);
+  const [deletedLogs, setDeletedLogs] = useState([]); // Track deleted log IDs
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
@@ -89,6 +90,12 @@ const TimeTracker = () => {
       });
       setLogs(migratedLogs);
     }
+    
+    // Load deleted logs
+    const savedDeletedLogs = localStorage.getItem('timeTrackerDeletedLogs');
+    if (savedDeletedLogs) {
+      setDeletedLogs(JSON.parse(savedDeletedLogs));
+    }
   
     // Load theme preference
     const savedTheme = localStorage.getItem('timeTrackerTheme');
@@ -131,6 +138,11 @@ const TimeTracker = () => {
         const mergedLogs = [...logsWithEditTime];
         
         serverLogs.forEach(serverLog => {
+          // Skip if this log has been deleted locally
+          if (deletedLogs.some(deleted => deleted.id === serverLog.id)) {
+            return;
+          }
+          
           const localLogIndex = mergedLogs.findIndex(l => l.id === serverLog.id);
           
           if (localLogIndex === -1) {
@@ -164,7 +176,10 @@ const TimeTracker = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ logs }),
+        body: JSON.stringify({ 
+          logs,
+          deletedLogs: deletedLogs.map(d => d.id) // Send list of deleted IDs
+        }),
       });
       
       if (syncResponse.ok) {
@@ -207,7 +222,7 @@ const TimeTracker = () => {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [logs, autoSync]);
+  }, [logs, deletedLogs, autoSync]);
 
   // Initial sync when auto-sync is enabled
   useEffect(() => {
@@ -349,6 +364,17 @@ const TimeTracker = () => {
       return;
     }
   
+    // Add to deleted logs list
+    setDeletedLogs(prev => {
+      const newDeleted = [...prev, {
+        id: logToRemove.id,
+        deletedAt: Date.now()
+      }];
+      // Save to localStorage
+      localStorage.setItem('timeTrackerDeletedLogs', JSON.stringify(newDeleted));
+      return newDeleted;
+    });
+  
     // Update logs state
     setLogs(prevLogs => {
       const newLogs = prevLogs.filter(log => log.id !== logToRemove.id);
@@ -484,6 +510,18 @@ const TimeTracker = () => {
 
   const clearLogs = () => {
     if (window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
+      // Add all current logs to deleted list
+      const allDeleted = logs.map(log => ({
+        id: log.id,
+        deletedAt: Date.now()
+      }));
+      
+      setDeletedLogs(prev => {
+        const newDeleted = [...prev, ...allDeleted];
+        localStorage.setItem('timeTrackerDeletedLogs', JSON.stringify(newDeleted));
+        return newDeleted;
+      });
+      
       setLogs([]);
       localStorage.removeItem('timeTrackerLogs');
     }
