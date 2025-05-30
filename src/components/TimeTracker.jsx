@@ -230,7 +230,15 @@ const TimeTracker = () => {
   };
 
   const handleTimeChange = (e) => {
-    setEditedTime(e.target.value);
+    // Native time input gives us HH:MM, we need to add seconds
+    const timeValue = e.target.value;
+    if (timeValue) {
+      // Extract seconds from the current editedTime if it exists, otherwise default to :00
+      const currentSeconds = editedTime ? editedTime.split(':')[2] || '00' : '00';
+      setEditedTime(`${timeValue}:${currentSeconds}`);
+    } else {
+      setEditedTime('');
+    }
   };
 
   const handleDateChange = (e) => {
@@ -242,10 +250,10 @@ const TimeTracker = () => {
   };
 
   const handleSaveEdit = (logToEdit) => {
-    // Validate time format (HH:mm:ss)
+    // Validate time - now we know it will be in HH:MM:SS format from our handler
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-    if (!timeRegex.test(editedTime)) {
-      alert('Please enter a valid time in 24-hour format (HH:mm:ss)');
+    if (!editedTime || !timeRegex.test(editedTime)) {
+      alert('Please enter a valid time');
       return;
     }
     
@@ -527,7 +535,7 @@ const TimeTracker = () => {
                             value={editedDate}
                             onChange={handleDateChange}
                             className={cn(
-                              "w-32 px-2 py-1 text-xs rounded border transition-colors",
+                              "w-full px-2 py-1.5 text-xs rounded border transition-colors",
                               isDarkMode 
                                 ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
                                 : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
@@ -545,16 +553,16 @@ const TimeTracker = () => {
                       {editingLogId === log.timestamp ? (
                         <div className="space-y-2">
                           <input
-                            type="text"
-                            value={editedTime}
+                            type="time"
+                            value={editedTime.substring(0, 5)}
                             onChange={handleTimeChange}
+                            step="1"
                             className={cn(
-                              "w-24 px-2 py-1 font-mono text-sm rounded border transition-colors",
+                              "w-full px-2 py-1.5 font-mono text-sm rounded border transition-colors",
                               isDarkMode 
                                 ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
                                 : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
                             )}
-                            placeholder="HH:mm:ss"
                           />
                           <div className="flex gap-1 justify-end">
                             <Button
