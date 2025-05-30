@@ -76,7 +76,18 @@ const TimeTracker = () => {
     // Load saved logs
     const savedLogs = localStorage.getItem('timeTrackerLogs');
     if (savedLogs) {
-      setLogs(JSON.parse(savedLogs));
+      const parsedLogs = JSON.parse(savedLogs);
+      // Migrate old logs without IDs
+      const migratedLogs = parsedLogs.map(log => {
+        if (!log.id) {
+          return {
+            ...log,
+            id: generateId()
+          };
+        }
+        return log;
+      });
+      setLogs(migratedLogs);
     }
   
     // Load theme preference
@@ -120,7 +131,7 @@ const TimeTracker = () => {
         const mergedLogs = [...logsWithEditTime];
         
         serverLogs.forEach(serverLog => {
-          const localLogIndex = mergedLogs.findIndex(l => l.timestamp === serverLog.timestamp);
+          const localLogIndex = mergedLogs.findIndex(l => l.id === serverLog.id);
           
           if (localLogIndex === -1) {
             // Log doesn't exist locally, add it
@@ -295,9 +306,15 @@ const TimeTracker = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const generateId = () => {
+    // Generate a unique ID using timestamp + random string
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   const handleCheckIn = () => {
     const now = new Date();
     setLogs(prev => [...prev, {
+      id: generateId(),
       type: 'Check In',
       date: now.toLocaleDateString(),
       time: formatTime(now),
@@ -316,6 +333,7 @@ const TimeTracker = () => {
     const duration = calculateDuration(checkInTime.getTime(), now.getTime());
   
     setLogs(prev => [...prev, {
+      id: generateId(),
       type: 'Check Out',
       date: now.toLocaleDateString(),
       time: formatTime(now),
@@ -333,7 +351,7 @@ const TimeTracker = () => {
   
     // Update logs state
     setLogs(prevLogs => {
-      const newLogs = prevLogs.filter(log => log.timestamp !== logToRemove.timestamp);
+      const newLogs = prevLogs.filter(log => log.id !== logToRemove.id);
       
       // Recalculate durations for all check-outs
       const recalculatedLogs = newLogs.map((log, index) => {
@@ -367,7 +385,7 @@ const TimeTracker = () => {
   };
 
   const handleStartEdit = (log) => {
-    setEditingLogId(log.timestamp);
+    setEditingLogId(log.id);
     setEditedTime(log.time); // Keep the full HH:MM:SS format
     setEditedDate(formatDateForInput(log.timestamp));
     setEditedType(log.type);
@@ -408,7 +426,7 @@ const TimeTracker = () => {
   
     // Update logs
     const updatedLogs = logs.map(log => {
-      if (log.timestamp === logToEdit.timestamp) {
+      if (log.id === logToEdit.id) {
         return {
           ...log,
           type: editedType || log.type,
@@ -547,10 +565,15 @@ const TimeTracker = () => {
                     const mergedLogs = [...logs];
                     
                     importedLogs.forEach(importedLog => {
-                      // Check if this log already exists (by timestamp)
-                      const exists = mergedLogs.some(log => log.timestamp === importedLog.timestamp);
+                      // Check if this log already exists (by id first, then by timestamp as fallback)
+                      const exists = mergedLogs.some(log => 
+                        (importedLog.id && log.id === importedLog.id) || 
+                        (!importedLog.id && log.timestamp === importedLog.timestamp)
+                      );
                       if (!exists) {
-                        mergedLogs.push(importedLog);
+                        // Add ID if missing
+                        const logWithId = importedLog.id ? importedLog : { ...importedLog, id: generateId() };
+                        mergedLogs.push(logWithId);
                       }
                     });
                     
@@ -625,7 +648,7 @@ const TimeTracker = () => {
             <div className="max-h-64 overflow-y-auto px-1 pr-3 py-2 relative">
               {logs.slice().reverse().map((log, index) => (
                 <div 
-                  key={log.timestamp} 
+                  key={log.id || `${log.timestamp}-${index}`} 
                   className={cn(
                     "group relative log-entry",
                     "p-2 rounded-lg text-sm mb-2 cursor-pointer",
@@ -633,13 +656,13 @@ const TimeTracker = () => {
                       ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
                       : log.type === 'Check In' ? 'bg-green-50' : 'bg-red-50'
                   )}
-                  onClick={() => setFocusedLogId(log.timestamp)}
-                  onMouseEnter={() => setFocusedLogId(log.timestamp)}
+                  onClick={() => setFocusedLogId(log.id)}
+                  onMouseEnter={() => setFocusedLogId(log.id)}
                   onMouseLeave={() => setFocusedLogId(null)}
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      {editingLogId === log.timestamp ? (
+                      {editingLogId === log.id ? (
                         <select
                           value={editedType || log.type}
                           onChange={handleTypeChange}
@@ -690,7 +713,7 @@ const TimeTracker = () => {
                       )}
                     </div>
                     <div className="text-right">
-                      {editingLogId === log.timestamp ? (
+                      {editingLogId === log.id ? (
                         <div className="space-y-2">
                           <input
                             type="time"
@@ -749,7 +772,7 @@ const TimeTracker = () => {
                             "font-mono",
                             isDarkMode ? "text-gray-100" : "text-gray-900"
                           )}>{log.time}</div>
-                          {focusedLogId === log.timestamp && (
+                          {focusedLogId === log.id && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -776,7 +799,7 @@ const TimeTracker = () => {
                   </div>
 
                   {/* Remove button - now visible for all entries */}
-                  {focusedLogId === log.timestamp && (
+                  {focusedLogId === log.id && (
                     <Button
                       variant="ghost"
                       size="sm"
