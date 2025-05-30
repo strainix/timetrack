@@ -21,6 +21,7 @@ const TimeTracker = () => {
   const [editedDate, setEditedDate] = useState('');
   const [editedType, setEditedType] = useState('');
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const [focusedLogId, setFocusedLogId] = useState(null);
 
   // Derive check-in state from logs
   const getCheckInState = () => {
@@ -83,7 +84,7 @@ const TimeTracker = () => {
   }, [logs]);
 
   // Save theme preference
-useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('timeTrackerTheme', JSON.stringify(isDarkMode));
     // Update document class for dark mode
     if (isDarkMode) {
@@ -97,7 +98,20 @@ useEffect(() => {
     if (themeColorMeta) {
       themeColorMeta.content = isDarkMode ? '#1f2937' : '#ffffff';
     }
-}, [isDarkMode]);
+  }, [isDarkMode]);
+
+  // Clear focus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Check if click is outside of any log entry
+      if (!e.target.closest('.log-entry')) {
+        setFocusedLogId(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   // Update timer based on check-in state
   useEffect(() => {
@@ -466,12 +480,15 @@ useEffect(() => {
                 <div 
                   key={log.timestamp} 
                   className={cn(
-                    "group relative",
-                    "p-2 rounded-lg text-sm mb-2",
+                    "group relative log-entry",
+                    "p-2 rounded-lg text-sm mb-2 cursor-pointer",
                     isDarkMode
                       ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
                       : log.type === 'Check In' ? 'bg-green-50' : 'bg-red-50'
                   )}
+                  onClick={() => setFocusedLogId(log.timestamp)}
+                  onMouseEnter={() => setFocusedLogId(log.timestamp)}
+                  onMouseLeave={() => setFocusedLogId(null)}
                 >
                   <div className="flex justify-between items-start">
                     <div>
@@ -570,20 +587,21 @@ useEffect(() => {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleStartEdit(log)}
-                            className={cn(
-                              "h-6 px-2 text-xs invisible group-hover:visible bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
-                              isDarkMode
-                                ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
-                                : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
-                            )}
-                            tabIndex={-1}
-                          >
-                            Edit
-                          </Button>
+                          {focusedLogId === log.timestamp && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartEdit(log)}
+                              className={cn(
+                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                                isDarkMode
+                                  ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
+                                  : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
+                              )}
+                            >
+                              Edit
+                            </Button>
+                          )}
                           <div className={cn(
                             "font-mono",
                             isDarkMode ? "text-gray-100" : "text-gray-900"
@@ -600,22 +618,23 @@ useEffect(() => {
                   </div>
 
                   {/* Remove button - now visible for all entries */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveLog(log)}
-                    className={cn(
-                      "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full invisible group-hover:visible",
-                      "flex items-center justify-center text-base leading-none",
-                      "border shadow-sm focus:outline-none focus:ring-0",
-                      isDarkMode
-                        ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
-                        : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
-                    )}
-                    tabIndex={-1}
-                  >
-                    ×
-                  </Button>
+                  {focusedLogId === log.timestamp && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveLog(log)}
+                      className={cn(
+                        "absolute -top-1.5 -right-1.5 h-5 w-5 p-0 rounded-full",
+                        "flex items-center justify-center text-base leading-none",
+                        "border shadow-sm focus:outline-none focus:ring-0",
+                        isDarkMode
+                          ? "text-red-400 hover:text-red-300 border-gray-600 bg-gray-800 hover:bg-gray-700" 
+                          : "text-red-600 hover:text-red-700 border-gray-200 bg-white hover:bg-gray-50"
+                      )}
+                    >
+                      ×
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
