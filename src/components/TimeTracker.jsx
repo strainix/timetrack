@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Clock, Download, Trash2, Moon, Sun, X } from 'lucide-react';
@@ -11,6 +11,10 @@ import {
 import ExportDialog from './ExportDialog';
 import CreditCardBadge from './CreditCardBadge';
 
+const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev';
+const STORAGE_KEY = 'timeTrackerShareCode';
+const AUTO_SYNC_KEY = 'timeTrackerAutoSync';
+
 const TimeTracker = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
@@ -22,6 +26,10 @@ const TimeTracker = () => {
   const [editedType, setEditedType] = useState('');
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [focusedLogId, setFocusedLogId] = useState(null);
+  const [autoSync, setAutoSync] = useState(false);
+  const [lastSyncTimestamp, setLastSyncTimestamp] = useState(null);
+  const syncTimeoutRef = useRef(null);
+  const lastEditTimestampRef = useRef(null);
 
   // Derive check-in state from logs
   const getCheckInState = () => {
@@ -76,11 +84,145 @@ const TimeTracker = () => {
     if (savedTheme) {
       setIsDarkMode(JSON.parse(savedTheme));
     }
+    
+    // Load auto-sync preference
+    const savedAutoSync = localStorage.getItem(AUTO_SYNC_KEY);
+    if (savedAutoSync) {
+      setAutoSync(JSON.parse(savedAutoSync));
+    }
   }, []);
 
+  // Auto-sync functionality
+  const syncData = async () => {
+    const shareCode = localStorage.getItem(STORAGE_KEY);
+    if (!shareCode || !autoSync) return;
+
+    try {
+      // Update sync status in the ExportDialog
+      if (window.updateSyncStatus) {
+        window.updateSyncStatus('syncing');
+      }
+
+      // First, fetch the latest data from the server
+      const fetchResponse = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`);
+      
+      if (fetchResponse.ok) {
+        const serverData = await fetchResponse.json();
+        const serverLogs = serverData.logs || [];
+        
+        // Create a map of logs with their last edit timestamp
+        const logsWithEditTime = logs.map(log => ({
+          ...log,
+          lastEditTimestamp: log.lastEditTimestamp || log.timestamp
+        }));
+        
+        // Merge logs: prefer server version unless local has been edited more recently
+        const mergedLogs = [...logsWithEditTime];
+        
+        serverLogs.forEach(serverLog => {
+          const localLogIndex = mergedLogs.findIndex(l => l.timestamp === serverLog.timestamp);
+          
+          if (localLogIndex === -1) {
+            // Log doesn't exist locally, add it
+            mergedLogs.push(serverLog);
+          } else {
+            const localLog = mergedLogs[localLogIndex];
+            const serverEditTime = serverLog.lastEditTimestamp || serverLog.timestamp;
+            const localEditTime = localLog.lastEditTimestamp || localLog.timestamp;
+            
+            // Only update if server version is newer or if this is the initial sync
+            if (!lastEditTimestampRef.current || serverEditTime > localEditTime) {
+              mergedLogs[localLogIndex] = serverLog;
+            }
+          }
+        });
+        
+        // Sort and update logs
+        mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Only update if there are actual changes
+        const logsChanged = JSON.stringify(mergedLogs) !== JSON.stringify(logs);
+        if (logsChanged) {
+          setLogs(mergedLogs);
+        }
+      }
+
+      // Then sync our current data to the server
+      const syncResponse = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ logs }),
+      });
+      
+      if (syncResponse.ok) {
+        setLastSyncTimestamp(Date.now());
+        if (window.updateSyncStatus) {
+          window.updateSyncStatus('idle');
+        }
+      } else {
+        throw new Error('Sync failed');
+      }
+    } catch (error) {
+      console.error('Auto-sync error:', error);
+      if (window.updateSyncStatus) {
+        window.updateSyncStatus('error');
+      }
+      // Retry after 30 seconds on error
+      syncTimeoutRef.current = setTimeout(syncData, 30000);
+    }
+  };
+
+  // Trigger sync when logs change (with debounce)
   useEffect(() => {
-    // Save logs
-    localStorage.setItem('timeTrackerLogs', JSON.stringify(logs));
+    if (!autoSync) return;
+
+    // Clear existing timeout
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    // Set edit timestamp when logs change
+    lastEditTimestampRef.current = Date.now();
+
+    // Debounce sync to avoid too many requests
+    syncTimeoutRef.current = setTimeout(() => {
+      syncData();
+    }, 2000); // 2 second debounce
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [logs, autoSync]);
+
+  // Initial sync when auto-sync is enabled
+  useEffect(() => {
+    if (autoSync) {
+      syncData();
+      // Set up periodic sync every 30 seconds
+      const intervalId = setInterval(syncData, 30000);
+      return () => clearInterval(intervalId);
+    }
+  }, [autoSync]);
+
+  const handleAutoSyncChange = (enabled) => {
+    setAutoSync(enabled);
+    if (enabled) {
+      // Sync immediately when enabled
+      syncData();
+    }
+  };
+
+  useEffect(() => {
+    // Save logs with edit timestamps
+    const logsToSave = logs.map(log => ({
+      ...log,
+      lastEditTimestamp: log.lastEditTimestamp || log.timestamp
+    }));
+    localStorage.setItem('timeTrackerLogs', JSON.stringify(logsToSave));
   }, [logs]);
 
   // Save theme preference
@@ -159,7 +301,8 @@ const TimeTracker = () => {
       type: 'Check In',
       date: now.toLocaleDateString(),
       time: formatTime(now),
-      timestamp: now.getTime()
+      timestamp: now.getTime(),
+      lastEditTimestamp: now.getTime()
     }]);
   };
 
@@ -177,7 +320,8 @@ const TimeTracker = () => {
       date: now.toLocaleDateString(),
       time: formatTime(now),
       timestamp: now.getTime(),
-      duration
+      duration,
+      lastEditTimestamp: now.getTime()
     }]);
   };
 
@@ -260,6 +404,7 @@ const TimeTracker = () => {
     const [hours, minutes, seconds] = editedTime.split(':').map(Number);
     const newDate = new Date(year, month - 1, day, hours, minutes, seconds);
     const newTimestamp = newDate.getTime();
+    const editTimestamp = Date.now();
   
     // Update logs
     const updatedLogs = logs.map(log => {
@@ -269,7 +414,8 @@ const TimeTracker = () => {
           type: editedType || log.type,
           date: newDate.toLocaleDateString(),
           time: editedTime,
-          timestamp: newTimestamp
+          timestamp: newTimestamp,
+          lastEditTimestamp: editTimestamp
         };
       }
       return log;
@@ -432,6 +578,7 @@ const TimeTracker = () => {
                     // Update state
                     setLogs(logsWithDurations);
                   }}
+                  onAutoSyncChange={handleAutoSyncChange}
                 />
               </Dialog>
             </div>
