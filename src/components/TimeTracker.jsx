@@ -224,21 +224,13 @@ const TimeTracker = () => {
 
   const handleStartEdit = (log) => {
     setEditingLogId(log.timestamp);
-    setEditedTime(log.time);
+    setEditedTime(log.time); // Keep the full HH:MM:SS format
     setEditedDate(formatDateForInput(log.timestamp));
     setEditedType(log.type);
   };
 
   const handleTimeChange = (e) => {
-    // Native time input gives us HH:MM, we need to add seconds
-    const timeValue = e.target.value;
-    if (timeValue) {
-      // Extract seconds from the current editedTime if it exists, otherwise default to :00
-      const currentSeconds = editedTime ? editedTime.split(':')[2] || '00' : '00';
-      setEditedTime(`${timeValue}:${currentSeconds}`);
-    } else {
-      setEditedTime('');
-    }
+    setEditedTime(e.target.value);
   };
 
   const handleDateChange = (e) => {
@@ -250,10 +242,10 @@ const TimeTracker = () => {
   };
 
   const handleSaveEdit = (logToEdit) => {
-    // Validate time - now we know it will be in HH:MM:SS format from our handler
+    // Validate time format (HH:mm:ss)
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-    if (!editedTime || !timeRegex.test(editedTime)) {
-      alert('Please enter a valid time');
+    if (!timeRegex.test(editedTime)) {
+      alert('Please enter a valid time in 24-hour format (HH:mm:ss)');
       return;
     }
     
@@ -535,10 +527,11 @@ const TimeTracker = () => {
                             value={editedDate}
                             onChange={handleDateChange}
                             className={cn(
-                              "w-full px-2 py-1.5 text-xs rounded border transition-colors",
+                              "w-32 px-2 py-1 text-sm rounded border transition-colors",
                               isDarkMode 
                                 ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
-                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
+                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400",
+                              "focus:outline-none focus:ring-0"
                             )}
                           />
                         </div>
@@ -555,13 +548,23 @@ const TimeTracker = () => {
                           <input
                             type="time"
                             value={editedTime.substring(0, 5)}
-                            onChange={handleTimeChange}
-                            step="1"
+                            onChange={(e) => {
+                              // Convert HH:MM to HH:MM:00
+                              const timeValue = e.target.value;
+                              if (timeValue) {
+                                setEditedTime(`${timeValue}:00`);
+                              }
+                            }}
+                            step="60"
                             className={cn(
-                              "w-full px-2 py-1.5 font-mono text-sm rounded border transition-colors",
+                              "w-28 px-2 py-1 font-mono text-sm rounded border transition-colors",
                               isDarkMode 
                                 ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
-                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
+                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400",
+                              "[&::-webkit-calendar-picker-indicator]:filter",
+                              "[&::-webkit-calendar-picker-indicator]:opacity-50",
+                              isDarkMode && "[&::-webkit-calendar-picker-indicator]:invert",
+                              "focus:outline-none focus:ring-0"
                             )}
                           />
                           <div className="flex gap-1 justify-end">
@@ -594,14 +597,18 @@ const TimeTracker = () => {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <div className={cn(
+                            "font-mono",
+                            isDarkMode ? "text-gray-100" : "text-gray-900"
+                          )}>{log.time}</div>
                           {focusedLogId === log.timestamp && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleStartEdit(log)}
                               className={cn(
-                                "h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
+                                "absolute -top-1 -left-14 h-6 px-2 text-xs bg-transparent hover:bg-opacity-80 focus:outline-none focus:ring-0",
                                 isDarkMode
                                   ? "text-blue-400 hover:text-blue-300 hover:bg-gray-700" 
                                   : "text-blue-600 hover:text-blue-700 hover:bg-gray-100/60"
@@ -610,10 +617,6 @@ const TimeTracker = () => {
                               Edit
                             </Button>
                           )}
-                          <div className={cn(
-                            "font-mono",
-                            isDarkMode ? "text-gray-100" : "text-gray-900"
-                          )}>{log.time}</div>
                         </div>
                       )}
                       {log.duration && !editingLogId && (
