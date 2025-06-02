@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Clock, Download, Trash2, Moon, Sun, X } from 'lucide-react';
@@ -11,15 +11,10 @@ import {
 import ExportDialog from './ExportDialog';
 import CreditCardBadge from './CreditCardBadge';
 
-const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev';
-const STORAGE_KEY = 'timeTrackerShareCode';
-const AUTO_SYNC_KEY = 'timeTrackerAutoSync';
-
 const TimeTracker = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [logs, setLogs] = useState([]);
-  const [deletedLogs, setDeletedLogs] = useState([]); // Track deleted log IDs
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [editedTime, setEditedTime] = useState('');
@@ -27,10 +22,6 @@ const TimeTracker = () => {
   const [editedType, setEditedType] = useState('');
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [focusedLogId, setFocusedLogId] = useState(null);
-  const [autoSync, setAutoSync] = useState(false);
-  const [lastSyncTimestamp, setLastSyncTimestamp] = useState(null);
-  const syncTimeoutRef = useRef(null);
-  const lastEditTimestampRef = useRef(null);
 
   // Derive check-in state from logs
   const getCheckInState = () => {
@@ -73,28 +64,81 @@ const TimeTracker = () => {
     return `${year}-${month}-${day}`;
   };
 
+  // Format date for display (handles multiple formats)
+  const formatDateForDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    
+    // If it's already in ISO format (YYYY-MM-DD), convert to locale
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateStr.split('-');
+      const date = new Date(year, month - 1, day);
+      return date.toLocaleDateString();
+    }
+    
+    // If it's US format (M/D/YYYY or MM/DD/YYYY), convert to locale
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const [month, day, year] = parts;
+        const date = new Date(year, month - 1, day);
+        return date.toLocaleDateString();
+      }
+    }
+    
+    // If it's European format with dots (DD.MM.YYYY), it's probably already in locale format
+    if (dateStr.includes('.')) {
+      return dateStr;
+    }
+    
+    // If we can't parse it, return as is
+    return dateStr;
+  };
+
   useEffect(() => {
     // Load saved logs
     const savedLogs = localStorage.getItem('timeTrackerLogs');
     if (savedLogs) {
       const parsedLogs = JSON.parse(savedLogs);
-      // Migrate old logs without IDs
+      
+      // Migrate old date formats to ISO format
       const migratedLogs = parsedLogs.map(log => {
-        if (!log.id) {
+        // Check if date is already in ISO format (YYYY-MM-DD)
+        if (log.date && !log.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Try to parse different date formats
+          let isoDate;
+          
+          // US format (M/D/YYYY or MM/DD/YYYY)
+          if (log.date.includes('/')) {
+            const parts = log.date.split('/');
+            if (parts.length === 3) {
+              const [month, day, year] = parts;
+              isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+          }
+          // European format with dots (DD.MM.YYYY)
+          else if (log.date.includes('.')) {
+            const parts = log.date.split('.');
+            if (parts.length === 3) {
+              const [day, month, year] = parts;
+              isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+          }
+          
+          // If we couldn't parse it, use timestamp to create ISO date
+          if (!isoDate) {
+            const date = new Date(log.timestamp);
+            isoDate = date.toISOString().split('T')[0];
+          }
+          
           return {
             ...log,
-            id: generateId()
+            date: isoDate
           };
         }
         return log;
       });
+      
       setLogs(migratedLogs);
-    }
-    
-    // Load deleted logs
-    const savedDeletedLogs = localStorage.getItem('timeTrackerDeletedLogs');
-    if (savedDeletedLogs) {
-      setDeletedLogs(JSON.parse(savedDeletedLogs));
     }
   
     // Load theme preference
@@ -102,153 +146,11 @@ const TimeTracker = () => {
     if (savedTheme) {
       setIsDarkMode(JSON.parse(savedTheme));
     }
-    
-    // Load auto-sync preference
-    const savedAutoSync = localStorage.getItem(AUTO_SYNC_KEY);
-    if (savedAutoSync) {
-      setAutoSync(JSON.parse(savedAutoSync));
-    }
   }, []);
 
-  // Auto-sync functionality
-  const syncData = async () => {
-    const shareCode = localStorage.getItem(STORAGE_KEY);
-    if (!shareCode || !autoSync) return;
-
-    try {
-      // Update sync status in the ExportDialog
-      if (window.updateSyncStatus) {
-        window.updateSyncStatus('syncing');
-      }
-
-      // First, fetch the latest data from the server
-      const fetchResponse = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`);
-      
-      if (fetchResponse.ok) {
-        const serverData = await fetchResponse.json();
-        const serverLogs = serverData.logs || [];
-        
-        // Create a map of logs with their last edit timestamp
-        const logsWithEditTime = logs.map(log => ({
-          ...log,
-          lastEditTimestamp: log.lastEditTimestamp || log.timestamp
-        }));
-        
-        // Merge logs: prefer server version unless local has been edited more recently
-        const mergedLogs = [...logsWithEditTime];
-        
-        serverLogs.forEach(serverLog => {
-          // Skip if this log has been deleted locally
-          if (deletedLogs.some(deleted => deleted.id === serverLog.id)) {
-            return;
-          }
-          
-          const localLogIndex = mergedLogs.findIndex(l => l.id === serverLog.id);
-          
-          if (localLogIndex === -1) {
-            // Log doesn't exist locally, add it
-            mergedLogs.push(serverLog);
-          } else {
-            const localLog = mergedLogs[localLogIndex];
-            const serverEditTime = serverLog.lastEditTimestamp || serverLog.timestamp;
-            const localEditTime = localLog.lastEditTimestamp || localLog.timestamp;
-            
-            // Only update if server version is newer or if this is the initial sync
-            if (!lastEditTimestampRef.current || serverEditTime > localEditTime) {
-              mergedLogs[localLogIndex] = serverLog;
-            }
-          }
-        });
-        
-        // Sort and update logs
-        mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
-        
-        // Only update if there are actual changes
-        const logsChanged = JSON.stringify(mergedLogs) !== JSON.stringify(logs);
-        if (logsChanged) {
-          setLogs(mergedLogs);
-        }
-      }
-
-      // Then sync our current data to the server
-      const syncResponse = await fetch(`${WORKER_API_URL}/api/timesheet/${shareCode}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          logs,
-          deletedLogs: deletedLogs.map(d => d.id) // Send list of deleted IDs
-        }),
-      });
-      
-      if (syncResponse.ok) {
-        setLastSyncTimestamp(Date.now());
-        if (window.updateSyncStatus) {
-          window.updateSyncStatus('idle');
-        }
-      } else {
-        throw new Error('Sync failed');
-      }
-    } catch (error) {
-      console.error('Auto-sync error:', error);
-      if (window.updateSyncStatus) {
-        window.updateSyncStatus('error');
-      }
-      // Retry after 30 seconds on error
-      syncTimeoutRef.current = setTimeout(syncData, 30000);
-    }
-  };
-
-  // Trigger sync when logs change (with debounce)
   useEffect(() => {
-    if (!autoSync) return;
-
-    // Clear existing timeout
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-    }
-
-    // Set edit timestamp when logs change
-    lastEditTimestampRef.current = Date.now();
-
-    // Debounce sync to avoid too many requests
-    syncTimeoutRef.current = setTimeout(() => {
-      syncData();
-    }, 2000); // 2 second debounce
-
-    return () => {
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-    };
-  }, [logs, deletedLogs, autoSync]);
-
-  // Initial sync when auto-sync is enabled
-  useEffect(() => {
-    if (autoSync) {
-      syncData();
-      // Set up periodic sync every 30 seconds
-      const intervalId = setInterval(syncData, 30000);
-      return () => clearInterval(intervalId);
-    }
-  }, [autoSync]);
-
-  const handleAutoSyncChange = (enabled) => {
-    setAutoSync(enabled);
-    if (enabled) {
-      // Sync immediately when enabled
-      syncData();
-    }
-  };
-
-  useEffect(() => {
-    // Save logs with edit timestamps
-    const logsToSave = logs.map(log => ({
-      ...log,
-      lastEditTimestamp: log.lastEditTimestamp || log.timestamp
-    }));
-    localStorage.setItem('timeTrackerLogs', JSON.stringify(logsToSave));
+    // Save logs
+    localStorage.setItem('timeTrackerLogs', JSON.stringify(logs));
   }, [logs]);
 
   // Save theme preference
@@ -321,20 +223,13 @@ const TimeTracker = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const generateId = () => {
-    // Generate a unique ID using timestamp + random string
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  };
-
   const handleCheckIn = () => {
     const now = new Date();
     setLogs(prev => [...prev, {
-      id: generateId(),
       type: 'Check In',
-      date: now.toLocaleDateString(),
+      date: now.toISOString().split('T')[0], // Use ISO format YYYY-MM-DD
       time: formatTime(now),
-      timestamp: now.getTime(),
-      lastEditTimestamp: now.getTime()
+      timestamp: now.getTime()
     }]);
   };
 
@@ -348,13 +243,11 @@ const TimeTracker = () => {
     const duration = calculateDuration(checkInTime.getTime(), now.getTime());
   
     setLogs(prev => [...prev, {
-      id: generateId(),
       type: 'Check Out',
-      date: now.toLocaleDateString(),
+      date: now.toISOString().split('T')[0], // Use ISO format YYYY-MM-DD
       time: formatTime(now),
       timestamp: now.getTime(),
-      duration,
-      lastEditTimestamp: now.getTime()
+      duration
     }]);
   };
 
@@ -364,20 +257,9 @@ const TimeTracker = () => {
       return;
     }
   
-    // Add to deleted logs list
-    setDeletedLogs(prev => {
-      const newDeleted = [...prev, {
-        id: logToRemove.id,
-        deletedAt: Date.now()
-      }];
-      // Save to localStorage
-      localStorage.setItem('timeTrackerDeletedLogs', JSON.stringify(newDeleted));
-      return newDeleted;
-    });
-  
     // Update logs state
     setLogs(prevLogs => {
-      const newLogs = prevLogs.filter(log => log.id !== logToRemove.id);
+      const newLogs = prevLogs.filter(log => log.timestamp !== logToRemove.timestamp);
       
       // Recalculate durations for all check-outs
       const recalculatedLogs = newLogs.map((log, index) => {
@@ -411,7 +293,7 @@ const TimeTracker = () => {
   };
 
   const handleStartEdit = (log) => {
-    setEditingLogId(log.id);
+    setEditingLogId(log.timestamp);
     setEditedTime(log.time); // Keep the full HH:MM:SS format
     setEditedDate(formatDateForInput(log.timestamp));
     setEditedType(log.type);
@@ -448,18 +330,16 @@ const TimeTracker = () => {
     const [hours, minutes, seconds] = editedTime.split(':').map(Number);
     const newDate = new Date(year, month - 1, day, hours, minutes, seconds);
     const newTimestamp = newDate.getTime();
-    const editTimestamp = Date.now();
   
     // Update logs
     const updatedLogs = logs.map(log => {
-      if (log.id === logToEdit.id) {
+      if (log.timestamp === logToEdit.timestamp) {
         return {
           ...log,
           type: editedType || log.type,
-          date: newDate.toLocaleDateString(),
+          date: newDate.toISOString().split('T')[0], // Use ISO format YYYY-MM-DD
           time: editedTime,
-          timestamp: newTimestamp,
-          lastEditTimestamp: editTimestamp
+          timestamp: newTimestamp
         };
       }
       return log;
@@ -510,18 +390,6 @@ const TimeTracker = () => {
 
   const clearLogs = () => {
     if (window.confirm('Are you sure you want to clear all logs? This cannot be undone.')) {
-      // Add all current logs to deleted list
-      const allDeleted = logs.map(log => ({
-        id: log.id,
-        deletedAt: Date.now()
-      }));
-      
-      setDeletedLogs(prev => {
-        const newDeleted = [...prev, ...allDeleted];
-        localStorage.setItem('timeTrackerDeletedLogs', JSON.stringify(newDeleted));
-        return newDeleted;
-      });
-      
       setLogs([]);
       localStorage.removeItem('timeTrackerLogs');
     }
@@ -603,15 +471,10 @@ const TimeTracker = () => {
                     const mergedLogs = [...logs];
                     
                     importedLogs.forEach(importedLog => {
-                      // Check if this log already exists (by id first, then by timestamp as fallback)
-                      const exists = mergedLogs.some(log => 
-                        (importedLog.id && log.id === importedLog.id) || 
-                        (!importedLog.id && log.timestamp === importedLog.timestamp)
-                      );
+                      // Check if this log already exists (by timestamp)
+                      const exists = mergedLogs.some(log => log.timestamp === importedLog.timestamp);
                       if (!exists) {
-                        // Add ID if missing
-                        const logWithId = importedLog.id ? importedLog : { ...importedLog, id: generateId() };
-                        mergedLogs.push(logWithId);
+                        mergedLogs.push(importedLog);
                       }
                     });
                     
@@ -639,7 +502,6 @@ const TimeTracker = () => {
                     // Update state
                     setLogs(logsWithDurations);
                   }}
-                  onAutoSyncChange={handleAutoSyncChange}
                 />
               </Dialog>
             </div>
@@ -686,7 +548,7 @@ const TimeTracker = () => {
             <div className="max-h-64 overflow-y-auto px-1 pr-3 py-2 relative">
               {logs.slice().reverse().map((log, index) => (
                 <div 
-                  key={log.id || `${log.timestamp}-${index}`} 
+                  key={log.timestamp} 
                   className={cn(
                     "group relative log-entry",
                     "p-2 rounded-lg text-sm mb-2 cursor-pointer",
@@ -694,13 +556,13 @@ const TimeTracker = () => {
                       ? log.type === 'Check In' ? 'bg-green-900/20' : 'bg-red-900/20'
                       : log.type === 'Check In' ? 'bg-green-50' : 'bg-red-50'
                   )}
-                  onClick={() => setFocusedLogId(log.id)}
-                  onMouseEnter={() => setFocusedLogId(log.id)}
+                  onClick={() => setFocusedLogId(log.timestamp)}
+                  onMouseEnter={() => setFocusedLogId(log.timestamp)}
                   onMouseLeave={() => setFocusedLogId(null)}
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      {editingLogId === log.id ? (
+                      {editingLogId === log.timestamp ? (
                         <select
                           value={editedType || log.type}
                           onChange={handleTypeChange}
@@ -738,8 +600,7 @@ const TimeTracker = () => {
                               "w-32 px-2 py-1 text-sm rounded border transition-colors",
                               isDarkMode 
                                 ? "bg-gray-700 border-gray-600 text-gray-100 focus:border-gray-500" 
-                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400",
-                              "focus:outline-none focus:ring-0"
+                                : "bg-white border-gray-300 text-gray-900 focus:border-gray-400"
                             )}
                           />
                         </div>
@@ -747,11 +608,11 @@ const TimeTracker = () => {
                         <div className={cn(
                           "text-xs",
                           isDarkMode ? "text-gray-400" : "text-gray-500"
-                        )}>{log.date}</div>
+                        )}>{formatDateForDisplay(log.date)}</div>
                       )}
                     </div>
                     <div className="text-right">
-                      {editingLogId === log.id ? (
+                      {editingLogId === log.timestamp ? (
                         <div className="space-y-2">
                           <input
                             type="time"
@@ -771,8 +632,7 @@ const TimeTracker = () => {
                                 : "bg-white border-gray-300 text-gray-900 focus:border-gray-400",
                               "[&::-webkit-calendar-picker-indicator]:filter",
                               "[&::-webkit-calendar-picker-indicator]:opacity-50",
-                              isDarkMode && "[&::-webkit-calendar-picker-indicator]:invert",
-                              "focus:outline-none focus:ring-0"
+                              isDarkMode && "[&::-webkit-calendar-picker-indicator]:invert"
                             )}
                           />
                           <div className="flex gap-1 justify-end">
@@ -810,7 +670,7 @@ const TimeTracker = () => {
                             "font-mono",
                             isDarkMode ? "text-gray-100" : "text-gray-900"
                           )}>{log.time}</div>
-                          {focusedLogId === log.id && (
+                          {focusedLogId === log.timestamp && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -837,7 +697,7 @@ const TimeTracker = () => {
                   </div>
 
                   {/* Remove button - now visible for all entries */}
-                  {focusedLogId === log.id && (
+                  {focusedLogId === log.timestamp && (
                     <Button
                       variant="ghost"
                       size="sm"

@@ -83,25 +83,79 @@ const ExportDialog = ({ logs, onClose, onImportLogs, onAutoSyncChange }) => {
     }
   }, []);
 
-  const generateExcelFile = (logsData) => {
-    // Existing Excel generation logic
-    const groupedByDate = logsData.reduce((acc, log) => {
-      if (!acc[log.date]) {
-        acc[log.date] = [];
+const generateExcelFile = (logsData) => {
+    // Helper function to normalize any date format to ISO (YYYY-MM-DD)
+    const normalizeDateToISO = (dateStr) => {
+      if (!dateStr) return '';
+      
+      // Already ISO format
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateStr;
       }
-      acc[log.date].push(log);
+      
+      // US format (M/D/YYYY or MM/DD/YYYY)
+      if (dateStr.includes('/') && !dateStr.includes('.')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          const [month, day, year] = parts;
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+      }
+      
+      // European format with dots (DD.MM.YYYY)
+      if (dateStr.includes('.')) {
+        const parts = dateStr.split('.');
+        if (parts.length === 3) {
+          const [day, month, year] = parts;
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+      }
+      
+      return dateStr;
+    };
+
+    // Helper function to format date from various formats to DD/MM/YYYY
+    const formatDateForExcel = (dateStr) => {
+      if (!dateStr) return '';
+      
+      // Normalize to ISO first
+      const isoDate = normalizeDateToISO(dateStr);
+      
+      // Then format to DD/MM/YYYY
+      if (isoDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = isoDate.split('-');
+        return `${day}/${month}/${year}`;
+      }
+      
+      // Fallback
+      return dateStr;
+    };
+
+    // Normalize dates for grouping
+    const normalizedLogs = logsData.map(log => ({
+      ...log,
+      normalizedDate: normalizeDateToISO(log.date)
+    }));
+
+    // Group by normalized date
+    const groupedByDate = normalizedLogs.reduce((acc, log) => {
+      if (!acc[log.normalizedDate]) {
+        acc[log.normalizedDate] = [];
+      }
+      acc[log.normalizedDate].push(log);
       return acc;
     }, {});
 
     // Process each day's logs to create pairs
-    const processedData = Object.entries(groupedByDate).map(([date, dayLogs]) => {
+    const processedData = Object.entries(groupedByDate).map(([normalizedDate, dayLogs]) => {
       const sortedLogs = dayLogs.sort((a, b) => a.timestamp - b.timestamp);
       const pairs = [];
       let currentPair = {};
       
       sortedLogs.forEach((log) => {
         if (log.type === 'Check In') {
-          currentPair = { date, checkIn: log.time };
+          // Use the original date for display, but format it consistently
+          currentPair = { date: formatDateForExcel(log.date), checkIn: log.time };
           pairs.push(currentPair);
         } else if (log.type === 'Check Out') {
           const lastIncompletePair = [...pairs].reverse().find(pair => !pair.checkOut);
