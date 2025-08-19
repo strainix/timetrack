@@ -1,9 +1,9 @@
-import TimeTrackerV2 from './components/TimeTrackerV2'
+import TimeTracker from './components/TimeTracker'
 
 function App() {
   return (
     <div className="min-h-screen bg-gray-100">
-      <TimeTrackerV2 />
+      <TimeTracker />
     </div>
   )
 }
