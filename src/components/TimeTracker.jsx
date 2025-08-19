@@ -23,7 +23,6 @@ const TimeTracker = () => {
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
   const [focusedLogId, setFocusedLogId] = useState(null);
 
-  // Derive check-in state from logs
   const getCheckInState = () => {
     if (logs.length === 0) return { isCheckedIn: false, checkInTime: null };
     
@@ -36,7 +35,6 @@ const TimeTracker = () => {
 
   const { isCheckedIn, checkInTime } = getCheckInState();
 
-  // Helper function for consistent time formatting
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-GB', { 
       hour: '2-digit', 
@@ -55,7 +53,6 @@ const TimeTracker = () => {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  // Format date for input field (YYYY-MM-DD)
   const formatDateForInput = (timestamp) => {
     const date = new Date(timestamp);
     const year = date.getFullYear();
@@ -64,18 +61,15 @@ const TimeTracker = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // Format date for display (handles multiple formats)
   const formatDateForDisplay = (dateStr) => {
     if (!dateStr) return '';
     
-    // If it's already in ISO format (YYYY-MM-DD), convert to locale
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const [year, month, day] = dateStr.split('-');
       const date = new Date(year, month - 1, day);
       return date.toLocaleDateString();
     }
     
-    // If it's US format (M/D/YYYY or MM/DD/YYYY), convert to locale
     if (dateStr.includes('/')) {
       const parts = dateStr.split('/');
       if (parts.length === 3) {
@@ -85,29 +79,22 @@ const TimeTracker = () => {
       }
     }
     
-    // If it's European format with dots (DD.MM.YYYY), it's probably already in locale format
     if (dateStr.includes('.')) {
       return dateStr;
     }
     
-    // If we can't parse it, return as is
     return dateStr;
   };
 
   useEffect(() => {
-    // Load saved logs
     const savedLogs = localStorage.getItem('timeTrackerLogs');
     if (savedLogs) {
       const parsedLogs = JSON.parse(savedLogs);
       
-      // Migrate old date formats to ISO format
       const migratedLogs = parsedLogs.map(log => {
-        // Check if date is already in ISO format (YYYY-MM-DD)
         if (log.date && !log.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          // Try to parse different date formats
           let isoDate;
           
-          // US format (M/D/YYYY or MM/DD/YYYY)
           if (log.date.includes('/')) {
             const parts = log.date.split('/');
             if (parts.length === 3) {
@@ -115,7 +102,6 @@ const TimeTracker = () => {
               isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
             }
           }
-          // European format with dots (DD.MM.YYYY)
           else if (log.date.includes('.')) {
             const parts = log.date.split('.');
             if (parts.length === 3) {
@@ -124,7 +110,6 @@ const TimeTracker = () => {
             }
           }
           
-          // If we couldn't parse it, use timestamp to create ISO date
           if (!isoDate) {
             const date = new Date(log.timestamp);
             isoDate = date.toISOString().split('T')[0];
@@ -141,7 +126,6 @@ const TimeTracker = () => {
       setLogs(migratedLogs);
     }
   
-    // Load theme preference
     const savedTheme = localStorage.getItem('timeTrackerTheme');
     if (savedTheme) {
       setIsDarkMode(JSON.parse(savedTheme));
@@ -149,31 +133,25 @@ const TimeTracker = () => {
   }, []);
 
   useEffect(() => {
-    // Save logs
     localStorage.setItem('timeTrackerLogs', JSON.stringify(logs));
   }, [logs]);
 
-  // Save theme preference
   useEffect(() => {
     localStorage.setItem('timeTrackerTheme', JSON.stringify(isDarkMode));
-    // Update document class for dark mode
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
     
-    // THIS IS THE NEW PART - Updates the theme-color meta tag
     const themeColorMeta = document.querySelector('meta[name="theme-color"]:not([media])');
     if (themeColorMeta) {
       themeColorMeta.content = isDarkMode ? '#1f2937' : '#ffffff';
     }
   }, [isDarkMode]);
 
-  // Clear focus when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      // Check if click is outside of any log entry
       if (!e.target.closest('.log-entry')) {
         setFocusedLogId(null);
       }
@@ -183,21 +161,17 @@ const TimeTracker = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Calculate total time worked today from completed sessions
   const getTodaysTotalTime = () => {
     const today = new Date().toISOString().split('T')[0];
     const todaysLogs = logs.filter(log => log.date === today);
     
     let totalMilliseconds = 0;
     
-    // Group check-ins with their corresponding check-outs
     for (let i = 0; i < todaysLogs.length; i++) {
       const log = todaysLogs[i];
       if (log.type === 'Check In') {
-        // Find the next check-out for this check-in
         const checkOut = todaysLogs.slice(i + 1).find(l => l.type === 'Check Out');
         if (checkOut) {
-          // Use actual timestamps for precise calculation
           totalMilliseconds += (checkOut.timestamp - log.timestamp);
         }
       }
@@ -206,19 +180,16 @@ const TimeTracker = () => {
     return totalMilliseconds;
   };
 
-  // Update timer based on check-in state
   useEffect(() => {
     let interval;
     
     if (isCheckedIn && checkInTime) {
       const todaysTotalMilliseconds = getTodaysTotalTime();
       
-      // Update immediately
       const currentSessionDiff = Date.now() - checkInTime.getTime();
       const totalTimeToday = todaysTotalMilliseconds + currentSessionDiff;
       setElapsedTime(formatElapsedTime(totalTimeToday));
       
-      // Then update every second
       interval = setInterval(() => {
         const currentTime = new Date();
         const currentSessionTime = currentTime - checkInTime;
@@ -226,7 +197,6 @@ const TimeTracker = () => {
         setElapsedTime(formatElapsedTime(totalTimeToday));
       }, 1000);
     } else {
-      // When not checked in, show today's total completed time
       const todaysTotalMilliseconds = getTodaysTotalTime();
       if (todaysTotalMilliseconds > 0) {
         setElapsedTime(formatElapsedTime(todaysTotalMilliseconds));
@@ -260,7 +230,7 @@ const TimeTracker = () => {
     const now = new Date();
     setLogs(prev => [...prev, {
       type: 'Check In',
-      date: now.toISOString().split('T')[0], // Use ISO format YYYY-MM-DD
+      date: now.toISOString().split('T')[0],
       time: formatTime(now),
       timestamp: now.getTime()
     }]);
@@ -277,7 +247,7 @@ const TimeTracker = () => {
   
     setLogs(prev => [...prev, {
       type: 'Check Out',
-      date: now.toISOString().split('T')[0], // Use ISO format YYYY-MM-DD
+      date: now.toISOString().split('T')[0],
       time: formatTime(now),
       timestamp: now.getTime(),
       duration
@@ -285,19 +255,15 @@ const TimeTracker = () => {
   };
 
   const handleRemoveLog = (logToRemove) => {
-    // Ask for confirmation
     if (!window.confirm('Are you sure you want to remove this entry? This may unpair check-in/check-out entries.')) {
       return;
     }
   
-    // Update logs state
     setLogs(prevLogs => {
       const newLogs = prevLogs.filter(log => log.timestamp !== logToRemove.timestamp);
       
-      // Recalculate durations for all check-outs
       const recalculatedLogs = newLogs.map((log, index) => {
         if (log.type === 'Check Out') {
-          // Find the most recent check-in before this check-out
           const previousCheckIn = [...newLogs].slice(0, index)
             .reverse()
             .find(l => l.type === 'Check In');
@@ -306,7 +272,6 @@ const TimeTracker = () => {
             const duration = calculateDuration(previousCheckIn.timestamp, log.timestamp);
             return { ...log, duration };
           } else {
-            // No matching check-in, remove duration
             const { duration, ...logWithoutDuration } = log;
             return logWithoutDuration;
           }
@@ -327,7 +292,7 @@ const TimeTracker = () => {
 
   const handleStartEdit = (log) => {
     setEditingLogId(log.timestamp);
-    setEditedTime(log.time); // Keep the full HH:MM:SS format
+    setEditedTime(log.time);
     setEditedDate(formatDateForInput(log.timestamp));
     setEditedType(log.type);
   };
@@ -345,32 +310,28 @@ const TimeTracker = () => {
   };
 
   const handleSaveEdit = (logToEdit) => {
-    // Validate time format (HH:mm:ss)
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
     if (!timeRegex.test(editedTime)) {
       alert('Please enter a valid time in 24-hour format (HH:mm:ss)');
       return;
     }
     
-    // Validate date
     if (!editedDate) {
       alert('Please enter a valid date');
       return;
     }
   
-    // Create the new date for the edited time
     const [year, month, day] = editedDate.split('-').map(Number);
     const [hours, minutes, seconds] = editedTime.split(':').map(Number);
     const newDate = new Date(year, month - 1, day, hours, minutes, seconds);
     const newTimestamp = newDate.getTime();
   
-    // Update logs
     const updatedLogs = logs.map(log => {
       if (log.timestamp === logToEdit.timestamp) {
         return {
           ...log,
           type: editedType || log.type,
-          date: newDate.toISOString().split('T')[0], // Use ISO format YYYY-MM-DD
+          date: newDate.toISOString().split('T')[0],
           time: editedTime,
           timestamp: newTimestamp
         };
@@ -378,10 +339,8 @@ const TimeTracker = () => {
       return log;
     });
   
-    // Sort logs by timestamp
     const sortedLogs = updatedLogs.sort((a, b) => a.timestamp - b.timestamp);
   
-    // Update all logs with corrected durations
     const logsWithDurations = sortedLogs.map((log, index) => {
       if (log.type === 'Check Out') {
         const previousCheckIn = [...sortedLogs].slice(0, index)
@@ -392,12 +351,10 @@ const TimeTracker = () => {
           const duration = calculateDuration(previousCheckIn.timestamp, log.timestamp);
           return { ...log, duration };
         } else {
-          // Remove duration if no matching check-in
           const { duration, ...logWithoutDuration } = log;
           return logWithoutDuration;
         }
       } else {
-        // Remove duration from check-ins if they have one
         const { duration, ...logWithoutDuration } = log;
         return logWithoutDuration;
       }
@@ -500,21 +457,17 @@ const TimeTracker = () => {
                 <ExportDialog 
                   logs={logs} 
                   onImportLogs={(importedLogs) => {
-                    // Merge imported logs with existing logs
                     const mergedLogs = [...logs];
                     
                     importedLogs.forEach(importedLog => {
-                      // Check if this log already exists (by timestamp)
                       const exists = mergedLogs.some(log => log.timestamp === importedLog.timestamp);
                       if (!exists) {
                         mergedLogs.push(importedLog);
                       }
                     });
                     
-                    // Sort by timestamp
                     mergedLogs.sort((a, b) => a.timestamp - b.timestamp);
                     
-                    // Recalculate durations
                     const logsWithDurations = mergedLogs.map((log, index) => {
                       if (log.type === 'Check Out') {
                         const previousCheckIn = [...mergedLogs].slice(0, index)
@@ -532,7 +485,6 @@ const TimeTracker = () => {
                       return log;
                     });
                     
-                    // Update state
                     setLogs(logsWithDurations);
                   }}
                 />
@@ -651,7 +603,6 @@ const TimeTracker = () => {
                             type="time"
                             value={editedTime.substring(0, 5)}
                             onChange={(e) => {
-                              // Convert HH:MM to HH:MM:00
                               const timeValue = e.target.value;
                               if (timeValue) {
                                 setEditedTime(`${timeValue}:00`);

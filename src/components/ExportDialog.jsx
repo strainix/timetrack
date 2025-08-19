@@ -10,7 +10,7 @@ import { Input } from '../components/ui/input';
 import { ArrowDownToLine, Share2, Download, Upload, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev'; // Replace with your worker URL
+const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev';
 const STORAGE_KEY = 'timeTrackerShareCode';
 const IMPORT_CODE_KEY = 'timeTrackerImportCode';
 
@@ -19,20 +19,18 @@ const ExportDialog = ({ logs, onClose, onImportLogs }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasSavedCode, setHasSavedCode] = useState(false);
-  const [activeTab, setActiveTab] = useState('local'); // 'local', 'share', 'import'
+  const [activeTab, setActiveTab] = useState('local');
   const [importCode, setImportCode] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    // Load saved share code from localStorage
     const savedCode = localStorage.getItem(STORAGE_KEY);
     if (savedCode) {
       setShareCode(savedCode);
       setHasSavedCode(true);
-      setActiveTab('share'); // Switch to share tab if user has a code
+      setActiveTab('share');
     }
     
-    // Load saved import code
     const savedImportCode = localStorage.getItem(IMPORT_CODE_KEY);
     if (savedImportCode) {
       setImportCode(savedImportCode);
@@ -43,16 +41,13 @@ const ExportDialog = ({ logs, onClose, onImportLogs }) => {
 
 
 const generateExcelFile = (logsData) => {
-    // Helper function to normalize any date format to ISO (YYYY-MM-DD)
     const normalizeDateToISO = (dateStr) => {
       if (!dateStr) return '';
       
-      // Already ISO format
       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
         return dateStr;
       }
       
-      // US format (M/D/YYYY or MM/DD/YYYY)
       if (dateStr.includes('/') && !dateStr.includes('.')) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
@@ -61,7 +56,6 @@ const generateExcelFile = (logsData) => {
         }
       }
       
-      // European format with dots (DD.MM.YYYY)
       if (dateStr.includes('.')) {
         const parts = dateStr.split('.');
         if (parts.length === 3) {
@@ -73,30 +67,24 @@ const generateExcelFile = (logsData) => {
       return dateStr;
     };
 
-    // Helper function to format date from various formats to DD/MM/YYYY
     const formatDateForExcel = (dateStr) => {
       if (!dateStr) return '';
       
-      // Normalize to ISO first
       const isoDate = normalizeDateToISO(dateStr);
       
-      // Then format to DD/MM/YYYY
       if (isoDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
         const [year, month, day] = isoDate.split('-');
         return `${day}/${month}/${year}`;
       }
       
-      // Fallback
       return dateStr;
     };
 
-    // Normalize dates for grouping
     const normalizedLogs = logsData.map(log => ({
       ...log,
       normalizedDate: normalizeDateToISO(log.date)
     }));
 
-    // Group by normalized date
     const groupedByDate = normalizedLogs.reduce((acc, log) => {
       if (!acc[log.normalizedDate]) {
         acc[log.normalizedDate] = [];
@@ -105,7 +93,6 @@ const generateExcelFile = (logsData) => {
       return acc;
     }, {});
 
-    // Process each day's logs to create pairs
     const processedData = Object.entries(groupedByDate).map(([normalizedDate, dayLogs]) => {
       const sortedLogs = dayLogs.sort((a, b) => a.timestamp - b.timestamp);
       const pairs = [];
@@ -113,7 +100,6 @@ const generateExcelFile = (logsData) => {
       
       sortedLogs.forEach((log) => {
         if (log.type === 'Check In') {
-          // Use the original date for display, but format it consistently
           currentPair = { date: formatDateForExcel(log.date), checkIn: log.time };
           pairs.push(currentPair);
         } else if (log.type === 'Check Out') {
@@ -250,17 +236,14 @@ const generateExcelFile = (logsData) => {
       
       const data = await response.json();
       
-      // Import the logs into the local time tracker
       if (onImportLogs && data.logs) {
         onImportLogs(data.logs);
       }
       
-      // Save this code as the new active code
       setShareCode(importCode.trim());
       setHasSavedCode(true);
       localStorage.setItem(STORAGE_KEY, importCode.trim());
       
-      // Save the import code in the textbox
       localStorage.setItem(IMPORT_CODE_KEY, importCode.trim());
       
       setSuccessMessage('Data imported successfully! Switch to "Local Export" to download.');
@@ -419,7 +402,6 @@ const generateExcelFile = (logsData) => {
                   value={importCode}
                   onChange={(e) => {
                     setImportCode(e.target.value);
-                    // Save to localStorage as user types
                     localStorage.setItem(IMPORT_CODE_KEY, e.target.value);
                   }}
                   onKeyPress={(e) => e.key === 'Enter' && fetchSharedData()}
