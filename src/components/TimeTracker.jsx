@@ -183,23 +183,56 @@ const TimeTracker = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Calculate total time worked today from completed sessions
+  const getTodaysTotalTime = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const todaysLogs = logs.filter(log => log.date === today);
+    
+    let totalMilliseconds = 0;
+    
+    // Group check-ins with their corresponding check-outs
+    for (let i = 0; i < todaysLogs.length; i++) {
+      const log = todaysLogs[i];
+      if (log.type === 'Check In') {
+        // Find the next check-out for this check-in
+        const checkOut = todaysLogs.slice(i + 1).find(l => l.type === 'Check Out');
+        if (checkOut) {
+          // Use actual timestamps for precise calculation
+          totalMilliseconds += (checkOut.timestamp - log.timestamp);
+        }
+      }
+    }
+    
+    return totalMilliseconds;
+  };
+
   // Update timer based on check-in state
   useEffect(() => {
     let interval;
     
     if (isCheckedIn && checkInTime) {
+      const todaysTotalMilliseconds = getTodaysTotalTime();
+      
       // Update immediately
-      const initialDiff = Date.now() - checkInTime.getTime();
-      setElapsedTime(formatElapsedTime(initialDiff));
+      const currentSessionDiff = Date.now() - checkInTime.getTime();
+      const totalTimeToday = todaysTotalMilliseconds + currentSessionDiff;
+      setElapsedTime(formatElapsedTime(totalTimeToday));
       
       // Then update every second
       interval = setInterval(() => {
         const currentTime = new Date();
-        const timeDiff = currentTime - checkInTime;
-        setElapsedTime(formatElapsedTime(timeDiff));
+        const currentSessionTime = currentTime - checkInTime;
+        const totalTimeToday = todaysTotalMilliseconds + currentSessionTime;
+        setElapsedTime(formatElapsedTime(totalTimeToday));
       }, 1000);
     } else {
-      setElapsedTime('00:00:00');
+      // When not checked in, show today's total completed time
+      const todaysTotalMilliseconds = getTodaysTotalTime();
+      if (todaysTotalMilliseconds > 0) {
+        setElapsedTime(formatElapsedTime(todaysTotalMilliseconds));
+      } else {
+        setElapsedTime('00:00:00');
+      }
     }
     
     return () => {
@@ -207,7 +240,7 @@ const TimeTracker = () => {
         clearInterval(interval);
       }
     };
-  }, [isCheckedIn, checkInTime]);
+  }, [isCheckedIn, checkInTime, logs]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -520,7 +553,7 @@ const TimeTracker = () => {
             <div className={cn(
               "text-4xl font-bold mb-6 font-mono",
               isDarkMode ? "text-gray-100" : "text-gray-900"
-            )}>{isCheckedIn ? elapsedTime : '00:00:00'}</div>
+            )}>{elapsedTime}</div>
             <Button 
               className={cn(
                 "w-48 h-12 transition-all duration-200 text-lg focus:outline-none focus:ring-0",

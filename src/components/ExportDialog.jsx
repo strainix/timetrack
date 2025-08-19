@@ -7,15 +7,14 @@ import {
 } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { ArrowDownToLine, Share2, Download, Upload, ArrowRight, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { ArrowDownToLine, Share2, Download, Upload, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const WORKER_API_URL = 'https://timetrack-api.nitenet.workers.dev'; // Replace with your worker URL
 const STORAGE_KEY = 'timeTrackerShareCode';
 const IMPORT_CODE_KEY = 'timeTrackerImportCode';
-const AUTO_SYNC_KEY = 'timeTrackerAutoSync';
 
-const ExportDialog = ({ logs, onClose, onImportLogs, onAutoSyncChange }) => {
+const ExportDialog = ({ logs, onClose, onImportLogs }) => {
   const [shareCode, setShareCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,8 +22,6 @@ const ExportDialog = ({ logs, onClose, onImportLogs, onAutoSyncChange }) => {
   const [activeTab, setActiveTab] = useState('local'); // 'local', 'share', 'import'
   const [importCode, setImportCode] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [autoSync, setAutoSync] = useState(false);
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'syncing', 'error'
 
   useEffect(() => {
     // Load saved share code from localStorage
@@ -41,47 +38,9 @@ const ExportDialog = ({ logs, onClose, onImportLogs, onAutoSyncChange }) => {
       setImportCode(savedImportCode);
     }
     
-    // Load auto-sync preference
-    const savedAutoSync = localStorage.getItem(AUTO_SYNC_KEY);
-    if (savedAutoSync) {
-      const autoSyncEnabled = JSON.parse(savedAutoSync);
-      setAutoSync(autoSyncEnabled);
-      if (onAutoSyncChange) {
-        onAutoSyncChange(autoSyncEnabled);
-      }
-    }
   }, []);
 
-  const handleToggleAutoSync = () => {
-    const newAutoSyncState = !autoSync;
-    setAutoSync(newAutoSyncState);
-    localStorage.setItem(AUTO_SYNC_KEY, JSON.stringify(newAutoSyncState));
-    
-    if (onAutoSyncChange) {
-      onAutoSyncChange(newAutoSyncState);
-    }
-    
-    if (newAutoSyncState) {
-      setSuccessMessage('Auto-sync enabled! Your data will sync in real-time.');
-    } else {
-      setSuccessMessage('Auto-sync disabled.');
-    }
-    
-    // Clear message after 3 seconds
-    setTimeout(() => setSuccessMessage(''), 3000);
-  };
 
-  // Update sync status when passed from parent
-  useEffect(() => {
-    if (onAutoSyncChange) {
-      // Get sync status from parent if available
-      const updateSyncStatus = (status) => setSyncStatus(status);
-      window.updateSyncStatus = updateSyncStatus;
-      return () => {
-        delete window.updateSyncStatus;
-      };
-    }
-  }, []);
 
 const generateExcelFile = (logsData) => {
     // Helper function to normalize any date format to ISO (YYYY-MM-DD)
@@ -404,48 +363,16 @@ const generateExcelFile = (logsData) => {
                       Use this code on your other devices to sync your time tracking data.
                     </p>
 
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={syncExistingCode}
-                        variant="outline"
-                        className="flex-1 flex items-center gap-2"
-                        disabled={isLoading}
-                      >
-                        <Upload className="w-4 h-4" />
-                        {isLoading ? 'Syncing...' : 'Sync Data'}
-                      </Button>
-                      
-                      <Button
-                        onClick={handleToggleAutoSync}
-                        variant={autoSync ? "default" : "outline"}
-                        className={`flex-1 flex items-center gap-2 ${
-                          autoSync ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''
-                        }`}
-                      >
-                        {autoSync ? (
-                          <>
-                            <Wifi className="w-4 h-4" />
-                            Auto-Sync On
-                          </>
-                        ) : (
-                          <>
-                            <WifiOff className="w-4 h-4" />
-                            Auto-Sync Off
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    <Button
+                      onClick={syncExistingCode}
+                      variant="outline"
+                      className="w-full flex items-center gap-2"
+                      disabled={isLoading}
+                    >
+                      <Upload className="w-4 h-4" />
+                      {isLoading ? 'Syncing...' : 'Sync Data'}
+                    </Button>
                     
-                    {autoSync && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <RefreshCw className={`w-3 h-3 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
-                        <span>
-                          {syncStatus === 'syncing' ? 'Syncing...' : 
-                           syncStatus === 'error' ? 'Sync error - will retry' : 
-                           'Real-time sync active'}
-                        </span>
-                      </div>
-                    )}
                     
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
